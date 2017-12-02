@@ -1,3 +1,11 @@
+# executables
+*.e
+
+# coverage
+*.gcno
+*.gcda
+*.gcov
+
 # Prerequisites
 *.d
 
