@@ -1,5 +1,5 @@
 FLAGS_COMMON=-std=c++14 -Wall -Wextra -pedantic -Wshadow -Wfloat-equal -Wswitch-default -Winit-self
-FLAGS_DEBUG=$(FLAGS_COMMON) -O0 -g -DDEBUG_PRINTS -coverage
+FLAGS_DEBUG=$(FLAGS_COMMON) -O0 -g -DDEBUG_PRINTS -coverage -ftrapv
 FLAGS_RELEASE=$(FLAGS_COMMON) -O3
 
 CC=g++-6
