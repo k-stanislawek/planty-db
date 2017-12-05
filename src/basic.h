@@ -180,8 +180,8 @@ template <typename T, std::enable_if_t<!has_read<T>::value, int> = 0> T read() {
 template <typename T, std::enable_if_t<has_read<T>::value, int> = 0> T read() { T t; t._read(); return t; }
 void read() {}
 template <typename T, typename ...Ts> void read(T& v, Ts& ...ts) { v = read<T>(); read(ts...); }
-template <typename T> std::vector<T> readv(i64 n) { std::vector<T> v; readv(n, v); return v; }
 template <typename T> void readv(i64 n, std::vector<T>& v) { for (i64 i = 0; i < n; i++) v.push_back(read<T>()); }
+template <typename T> std::vector<T> readv(i64 n) { std::vector<T> v; readv(n, v); return v; }
 #define PRINTERS(FNAME, OUTP) \
     void FNAME() {} \
     template <typename T> void FNAME(const T& t) { OUTP << t; } \
@@ -200,4 +200,10 @@ PRINTERS(lprint, std::cerr)
 # define dprintv(...)
 # define dprintln(...)
 #endif
-/// }}}
+// }}}
+template <typename T> bool vector_less(const std::vector<T>& v1, const std::vector<T>& v2) {
+    massert(v1.size() == v2.size(), "wrong value len");
+    for (size_t i = 0; i < v1.size(); i++) if (v1[i] != v2[i]) return v1[i] < v2[i];
+    return false;
+}
+
