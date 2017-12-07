@@ -114,7 +114,10 @@ public:
         range_.r() = std::min(range_.r(), narrower.r());
         range_.normalize();
     }
-    void set_indices_set(indices_t&& indices) { indices_ = indices; }
+    void set_indices_set(indices_t&& indices) {
+        indices_set_used_ = true;
+        indices_ = indices;
+    }
 private:
     indices_t indices_;
     RowRange range_;
@@ -232,7 +235,7 @@ private:
     std::vector<IntColumn::ptr> columns_;
 };
 
-// main loop {{{
+// table playground {{{
 class TablePlayground {
 public:
     TablePlayground(Table& table) : table_(table) {}
@@ -262,10 +265,13 @@ public:
             for (const auto value : rows) {
                 bool remains = true;
                 for (i64 column_id = first_non_range_column_id; column_id < isize(filters); column_id++)
-                    remains &= filters[column_id].empty() || std::binary_search(filters[column_id].begin(), filters[column_id].end(), table_.column(column_id)->ref(value));
+                    remains &= filters[column_id].empty() ||
+                        (filters[column_id].size() == 1 && filters[column_id][0] == table_.column(column_id)->ref(value));
+                    //remains &= filters[column_id].empty() || std::binary_search(filters[column_id].begin(), filters[column_id].end(), table_.column(column_id)->ref(value));
                 if (remains)
                     remaining.push_back(value);
             }
+            dprintln(remaining);
             rows.set_indices_set(std::move(remaining));
         }
         table_.write(select_cols, rows, outp);
@@ -273,10 +279,11 @@ public:
 private:
     Table& table_;
 };
+// }}}
+// main loop {{{
 struct CmdArgs {
     std::string filename;
 };
-
 struct Query {
     vstr where_cols;
     vi64 where_vals;
@@ -301,13 +308,13 @@ Query parse(const std::string line) {
         while (no_comma == false) {
             ss >> token;
             dprintln(token);
-            if (ss.eof())
-                break;
             if (token.back() != ',')
                 no_comma = true;
             else
                 token.pop_back();
             q.select_cols.push_back(token);
+            if (ss.eof())
+                break;
         }
     }
     dprintln("where phase");
@@ -348,10 +355,12 @@ void main_loop(const CmdArgs& args) {
     TablePlayground t(tbl);
     std::string line;
     while (std::getline(std::cin, line)) {
+        println();
         auto q = parse(line);
         OutputFrame outp(std::cout);
         dprintln(q.where_cols, q.where_vals, q.select_cols);
         t.run(q.where_cols, q.where_vals, q.select_cols, outp);
+        dprintln();
     }
 }
 // }}}

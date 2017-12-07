@@ -1,0 +1,5 @@
+select col1 where col1=13, col1=69
+select col1 where col2=42
+select col1, col2 where col2=42
+select col2
+select col2 where col1=13, col2=42
