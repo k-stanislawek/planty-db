@@ -276,22 +276,82 @@ private:
 struct CmdArgs {
     std::string filename;
 };
+
+struct Query {
+    vstr where_cols;
+    vi64 where_vals;
+    vstr select_cols;
+};
+
+struct ParseError : public std::runtime_error { ParseError(std::string error) : std::runtime_error(error) {} };
+
+Query parse(const std::string line) {
+    Query q;
+    std::stringstream ss(line);
+    std::string token;
+    if (!ss.eof()) {
+        ss >> token;
+        dprintln(token);
+        if (token != "select")
+            throw ParseError("no select at the beginning");
+    } else
+        throw ParseError("empty line");
+    {
+        bool no_comma = false;
+        while (no_comma == false) {
+            ss >> token;
+            dprintln(token);
+            if (ss.eof())
+                break;
+            if (token.back() != ',')
+                no_comma = true;
+            else
+                token.pop_back();
+            q.select_cols.push_back(token);
+        }
+    }
+    dprintln("where phase");
+    if (!ss.eof()) {
+        ss >> token;
+        dprintln(token);
+        if (token != "where")
+            throw ParseError("no where after selects: " + token);
+    } else
+        return q; // where can be empty
+    dprintln("where values");
+    {
+        bool no_comma = false;
+        while (no_comma == false) {
+            ss >> token;
+            dprintln(token);
+            if (token.back() != ',')
+                no_comma = true;
+            else
+                token.pop_back();
+            const auto sep = token.find_first_of("=");
+            const auto col = token.substr(0, sep);
+            const value_t val = stoll(token.substr(sep + 1, isize(token) - sep - 1));
+            q.where_cols.push_back(col);
+            q.where_vals.push_back(val);
+            if (ss.eof())
+                break;
+        }
+    }
+    return q;
+}
+
 void main_loop(const CmdArgs& args) {
     Table tbl;
     std::ifstream ifs(args.filename);
     InputFrame file(ifs);
     tbl.read(file);
     TablePlayground t(tbl);
-    while (true) {
-        dprintln("k");
-        auto where_cols = readv<std::string>(read<u64>());
-        dprintln("l");
-        auto where_vals = readv<value_t>(where_cols.size());
-        dprintln("m");
-        auto select_cols = readv<std::string>(read<u64>());
+    std::string line;
+    while (std::getline(std::cin, line)) {
+        auto q = parse(line);
         OutputFrame outp(std::cout);
-        dprintln(where_cols, where_vals, select_cols);
-        t.run(where_cols, where_vals, select_cols, outp);
+        dprintln(q.where_cols, q.where_vals, q.select_cols);
+        t.run(q.where_cols, q.where_vals, q.select_cols, outp);
     }
 }
 // }}}
