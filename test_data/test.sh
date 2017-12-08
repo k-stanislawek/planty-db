@@ -1,7 +1,7 @@
 #!/bin/bash
 (
 cd $(dirname $( readlink -f $0))
-tests="10x2 1x4 2x2 syntax_errors semantic_errors"
+tests="10x2 1x4 2x2 syntax_errors semantics_errors"
 for t in $tests; do
     echo $t
     if [ "$1" == "apply" ]; then

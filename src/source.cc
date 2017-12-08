@@ -194,6 +194,12 @@ private:
     std::ostream& os_;
 };
 // }}}
+struct Query {
+    vstr where_cols;
+    vi64 where_vals;
+    vstr select_cols;
+    auto _repr() const { return make_repr("Query", {"where_cols", "where_vals", "select_cols"}, where_cols, where_vals, select_cols); }
+};
 class Table {
 public:
     // read/write {{{
@@ -225,6 +231,12 @@ public:
                 frame.add_to_row(columns_[columns[i]]->ref(row_num));
         }
     }
+    void validate(const Query& q) const {
+        for (const auto& col : q.where_cols)
+            resolve_column_(col);
+        for (const auto& col : q.select_cols)
+            resolve_column_(col);
+    }
     // }}}
     const IntColumn::ptr& column(const cname& name) const noexcept {
         return columns_[resolve_column_(name)];
@@ -247,7 +259,8 @@ private:
         for (i64 i = 0; i < isize(columns_); i++)
             if (columns_[i]->name() == name)
                 return i;
-        throw query_semantics_error("unknown column name: " + name);
+        table_check(false, "unknown column name: " + name); 
+        return 0;
     }
     std::vector<std::string> header_key_;
     std::vector<IntColumn::ptr> columns_;
@@ -299,12 +312,6 @@ private:
 };
 // }}}
 // parse {{{
-struct Query {
-    vstr where_cols;
-    vi64 where_vals;
-    vstr select_cols;
-    auto _repr() const { return make_repr("Query", {"where_cols", "where_vals", "select_cols"}, where_cols, where_vals, select_cols); }
-};
 Query parse(const std::string line) {
     Query q;
     std::stringstream ss(line);
@@ -375,6 +382,7 @@ void main_loop(const CmdArgs& args) {
         try {
             println();
             auto q = parse(line);
+            tbl.validate(q);
             OutputFrame outp(std::cout);
             dprintln(repr(q));
             t.run(q.where_cols, q.where_vals, q.select_cols, outp);
