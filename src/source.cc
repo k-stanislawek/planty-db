@@ -145,10 +145,26 @@ private:
     bool indices_set_used_;
 };
 
-// input, output frame {{{zo
+// metadata {{{
+class Metadata {
+public:
+    Metadata(vstr&& columns0, i64 key_len0) : columns_(columns0), key_len_(key_len0) {
+        table_check(key_len_ <= isize(columns_), "key_len " + std::to_string(key_len_) + " exceeds header length " + std::to_string(isize(columns_)));
+    }
+    const auto& columns() const { return columns_; }
+    const auto& key_len() const { return key_len_; }
+private:
+    vstr columns_ = {};
+    i64 key_len_ = 0;
+};
+// }}}
+// input, output frame {{{
 class InputFrame {
 public:
     InputFrame(std::istream& is) : is_(is) {
+    }
+    Metadata get_metadata() {
+        return Metadata(get_header(), 0);
     }
     vstr get_header() {
         char sep = '\0';
@@ -203,22 +219,29 @@ struct Query {
 };
 class Table {
 public:
+    Table(Metadata metadata0, std::vector<IntColumn::ptr> columns0) : metadata_(std::move(metadata0)), columns_(std::move(columns0)) {}
+public:
     // read/write {{{
-    void read(InputFrame& frame) {
-        const vstr header = frame.get_header();
-        columns_.resize(header.size());
+    static Table read(InputFrame& frame) {
+        auto metadata = frame.get_metadata();
+        const auto& header = metadata.columns();
+        std::vector<IntColumn::ptr> columns(metadata.columns().size());
+
+        columns.resize(metadata.columns().size());
         for (i64 i = 0; i < isize(header); i++) {
-            columns_[i] = IntColumn::make();
-            columns_[i]->name() = header[i];
+            columns[i] = IntColumn::make();
+            columns[i]->name() = header[i];
         }
-        massert(!columns_.empty(), "empty header");
-        auto column_it = columns_.begin();
+        massert(!columns.empty(), "empty header");
+        auto column_it = columns.begin();
         for (auto elem = *frame; !frame.end(); elem = *(++frame)) {
             (*column_it)->push_back(elem);
-            if (++column_it == columns_.end()) column_it = columns_.begin();
+            if (++column_it == columns.end()) column_it = columns.begin();
         }
-        table_check(column_it == columns_.begin(), "couldn't read the same number of values for each column");
-        dprintln("rows:", rows_count(), "columns:", columns_count());
+        table_check(column_it == columns.begin(), "couldn't read the same number of values for each column");
+        Table tbl(std::move(metadata), std::move(columns));
+        dprintln("rows:", tbl.rows_count(), "columns:", tbl.columns_count());
+        return tbl;
     }
     void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
         frame.add_header(names);
@@ -263,7 +286,7 @@ private:
         table_check(false, "unknown column name: " + name); 
         return 0;
     }
-    std::vector<std::string> header_key_;
+    Metadata metadata_;
     std::vector<IntColumn::ptr> columns_;
 };
 
@@ -373,11 +396,10 @@ struct CmdArgs {
     std::string filename;
 };
 void main_loop(const CmdArgs& args) {
-    Table tbl;
     std::ifstream ifs(args.filename);
     table_check(!ifs.fail(), "couldn't open database file " + args.filename);
     InputFrame file(ifs);
-    tbl.read(file);
+    auto tbl = Table::read(file);
     TablePlayground t(tbl);
     std::string line;
     while (std::getline(std::cin, line)) {
