@@ -375,6 +375,7 @@ struct CmdArgs {
 void main_loop(const CmdArgs& args) {
     Table tbl;
     std::ifstream ifs(args.filename);
+    table_check(!ifs.fail(), "couldn't open database file " + args.filename);
     InputFrame file(ifs);
     tbl.read(file);
     TablePlayground t(tbl);
