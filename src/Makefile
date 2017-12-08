@@ -27,4 +27,3 @@ coverage: debug.e
 
 clean:
 	rm -rf html *.e *.gcno *.gcda lcov.info
-

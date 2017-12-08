@@ -99,7 +99,7 @@ private:
 class RowNumbers {
 public:
     using iterator = RowNumbersIterator;
-    RowNumbers(index_t len) : range_(0, len - 1) {}
+    RowNumbers(index_t len) : range_(0, len - 1), indices_set_used_(false) {}
     RowRange full_range() const { return range_; }
 
     iterator begin() const {
