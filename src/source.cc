@@ -158,13 +158,10 @@ public:
     OutputFrame(std::ostream& os) : os_(os) {
     }
     void add_header(const vstr& header) {
-        if (header.empty())
-            os_ << '\n';
-        else {
-            os_ << header[0];
-            for (i64 i = 1; i < isize(header); i++)
-                os_ << ' ' << header[i];
-        }
+        massert(!header.empty(), "header can't be empty");
+        os_ << header[0];
+        for (i64 i = 1; i < isize(header); i++)
+            os_ << ' ' << header[i];
     }
     void new_row(const i64& val) { os_ << '\n' << val; }
     void add_to_row(const i64& val) {
@@ -206,8 +203,7 @@ public:
         frame.add_header(names);
         const auto columns = resolve_columns_(names);
         const size_t columns_count = columns.size();
-        if (columns_count == 0)
-            return;
+        massert(columns_count > 0, "can't select 0 columns");
         for (const auto row_num : rows) {
             frame.new_row(columns_[columns[0]]->ref(row_num));
             for (u64 i = 1; i < columns_count; i++)
@@ -318,6 +314,8 @@ Query parse(const std::string line) {
             q.select_cols.push_back(token);
         }
     }
+    if (q.select_cols.empty())
+        throw ParseError("select list empty");
     if (!ss.eof()) {
         ss >> token;
         if (token != "where")
