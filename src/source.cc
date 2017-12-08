@@ -159,7 +159,8 @@ public:
             table_check(!is_.eof(), "empty header");
             header.push_back(s);
             is_.read(&sep, 1);
-            table_check(!(sep != '\n' && sep != '\t' && sep != ' '), "Bad separator: ascii code " + std::to_string(static_cast<int>(sep)));
+            table_check(!(sep != '\n' && sep != '\t' && sep != ' '),
+                    "Bad separator: ascii code " + std::to_string(static_cast<int>(sep)));
         }
         dprintln("header", header);
         ++(*this);
@@ -210,13 +211,13 @@ public:
             columns_[i] = IntColumn::make();
             columns_[i]->name() = header[i];
         }
-        table_check(!columns_.empty(), "empty header");
+        massert(!columns_.empty(), "empty header");
         auto column_it = columns_.begin();
         for (auto elem = *frame; !frame.end(); elem = *(++frame)) {
             (*column_it)->push_back(elem);
             if (++column_it == columns_.end()) column_it = columns_.begin();
         }
-        table_check(column_it == columns_.begin(), "File was incomplete");
+        table_check(column_it == columns_.begin(), "couldn't read the same number of values for each column");
         dprintln("rows:", rows_count(), "columns:", columns_count());
     }
     void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
