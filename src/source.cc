@@ -196,7 +196,7 @@ public:
 #ifndef NDEBUG
         for (auto& column : columns_)
             massert(column->rows_count() == columns_.front()->rows_count(), "wrong column length: " + column->name());
-#endif   
+#endif
     }
     void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
         frame.add_header(names);
@@ -272,7 +272,6 @@ public:
                 if (remains)
                     remaining.push_back(value);
             }
-            dprintln(remaining);
             rows.set_indices_set(std::move(remaining));
         }
         table_.write(select_cols, rows, outp);
