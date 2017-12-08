@@ -39,7 +39,7 @@ public:
     cname& name() noexcept { return name_; }
     const cname& name() const noexcept { return name_; }
     const value_t& ref(index_t index) const { return data_.at(index); } // todo add noexcept, at replace with [] and assert
-    index_t count() const noexcept { return isize(data_); }
+    index_t rows_count() const noexcept { return isize(data_); }
     // todo implement
     RowRange equal_range(value_t vall, value_t valr) const noexcept;
     RowRange equal_range(value_t val) const noexcept {
@@ -195,7 +195,7 @@ public:
         dprintln("rows:", rows_count(), "columns:", columns_count());
 #ifndef NDEBUG
         for (auto& column : columns_)
-            massert(column->count() == columns_.front()->count(), "wrong column length: " + column->name());
+            massert(column->rows_count() == columns_.front()->rows_count(), "wrong column length: " + column->name());
 #endif   
     }
     void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
@@ -216,7 +216,8 @@ public:
         return columns_.at(column_id);
     }
     index_t column_id(const cname& name) const noexcept { return resolve_column_(name); }
-    size_t count() const { return columns_.at(0)->count(); }
+    size_t rows_count() const { return columns_.at(0)->rows_count(); }
+    size_t columns_count() const { return isize(columns_); }
 private:
     indices_t resolve_columns_(const cnames& names) const {
         indices_t columns;
@@ -240,9 +241,9 @@ class TablePlayground {
 public:
     TablePlayground(Table& table) : table_(table) {}
     void run(vstr& where_cols, vi64& where_vals, vstr& select_cols, OutputFrame& outp) {
-        RowNumbers rows(table_.count());
+        RowNumbers rows(table_.rows_count());
         massert(where_cols.size() == where_vals.size(), "different cols and vals len");
-        std::vector<std::vector<value_t>> filters(table_.count());
+        std::vector<std::vector<value_t>> filters(table_.columns_count());
         for (i64 i = 0; i < isize(where_cols); i++) {
             const value_t value = where_vals.at(i);
             const auto column_id = table_.column_id(where_cols.at(i));
