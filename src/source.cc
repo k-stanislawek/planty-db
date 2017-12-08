@@ -27,6 +27,12 @@ add_exception(query_semantics_error, data_error);
 #undef add_exception
 // }}}
 
+// {{{ particular asserts
+#define bound_assert(INDEX, CONTAINER) massert(INDEX >= 0 && INDEX < isize(CONTAINER), \
+        "Index '" #INDEX "' = " + std::to_string(INDEX) + " out of bounds of container '" #CONTAINER \
+        "' with size " + std::to_string(isize(CONTAINER)))
+// }}}
+
 class RowRange {
 friend class RowNumbers;
 friend class RowNumbersIterator;
@@ -53,7 +59,7 @@ public:
     void push_back(const value_t elem) { data_.push_back(elem); }
     cname& name() noexcept { return name_; }
     const cname& name() const noexcept { return name_; }
-    const value_t& ref(index_t index) const { return data_.at(index); } // todo add noexcept, at replace with [] and assert
+    const value_t& ref(index_t index) const noexcept { bound_assert(index, data_); return data_[index]; }
     index_t rows_count() const noexcept { return isize(data_); }
     // todo implement
     RowRange equal_range(value_t vall, value_t valr) const noexcept;
@@ -152,7 +158,7 @@ public:
             is_ >> s;
             header.push_back(s);
             is_.read(&sep, 1);
-            table_check(!(sep != '\n' && sep != '\t' && sep != ' '), std::string("Bad separator: ascii code ") + std::to_string(static_cast<int>(sep)));
+            table_check(!(sep != '\n' && sep != '\t' && sep != ' '), "Bad separator: ascii code " + std::to_string(static_cast<int>(sep)));
         }
         dprintln("header", header);
         ++(*this);
@@ -220,13 +226,14 @@ public:
     }
     // }}}
     const IntColumn::ptr& column(const cname& name) const noexcept {
-        return columns_.at(resolve_column_(name));
+        return columns_[resolve_column_(name)];
     }
     const IntColumn::ptr& column(const index_t& column_id) const noexcept {
-        return columns_.at(column_id);
+        massert(column_id < isize(columns_), "index out of bound: " + std::to_string(column_id));
+        return columns_[column_id];
     }
     index_t column_id(const cname& name) const noexcept { return resolve_column_(name); }
-    size_t rows_count() const { return columns_.at(0)->rows_count(); }
+    size_t rows_count() const { return columns_[0]->rows_count(); }
     size_t columns_count() const { return isize(columns_); }
 private:
     indices_t resolve_columns_(const cnames& names) const {
@@ -255,8 +262,8 @@ public:
         massert(where_cols.size() == where_vals.size(), "different cols and vals len");
         std::vector<std::vector<value_t>> filters(table_.columns_count());
         for (i64 i = 0; i < isize(where_cols); i++) {
-            const value_t value = where_vals.at(i);
-            const auto column_id = table_.column_id(where_cols.at(i));
+            const value_t value = where_vals[i];
+            const auto column_id = table_.column_id(where_cols[i]);
             filters[column_id].push_back(value);
         }
         i64 first_non_range_column_id = isize(filters);
