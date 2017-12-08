@@ -156,6 +156,7 @@ public:
         while (sep != '\n') {
             std::string s;
             is_ >> s;
+            table_check(!is_.eof(), "empty header");
             header.push_back(s);
             is_.read(&sep, 1);
             table_check(!(sep != '\n' && sep != '\t' && sep != ' '), "Bad separator: ascii code " + std::to_string(static_cast<int>(sep)));
@@ -314,18 +315,19 @@ Query parse(const std::string line) {
     query_format_check(token == "select", "no select at the beginning");
     dprint("<select>");
     {
-        bool no_comma = false;
-        while (no_comma == false && !ss.eof()) {
+        bool no_comma = true;
+        while (no_comma && !ss.eof()) {
             ss >> token;
             if (token.back() != ',')
-                no_comma = true;
+                no_comma = false;
             else
                 token.pop_back();
             dprint(" [" + token + "]");
             q.select_cols.push_back(token);
         }
+        query_format_check(!q.select_cols.empty(), "select list empty");
+        query_format_check(!no_comma, "no comma after select list");
     }
-    query_format_check(!q.select_cols.empty(), "select list empty");
     if (ss.eof()) {
         dprintln(';');
         return q;
@@ -334,11 +336,11 @@ Query parse(const std::string line) {
     query_format_check(token == "where", "something else than 'where' after select list: " + token);
     dprint(" <where>");
     {
-        bool no_comma = false;
-        while (no_comma == false && !ss.eof()) {
+        bool no_comma = true;
+        while (no_comma && !ss.eof()) {
             ss >> token;
             if (token.back() != ',')
-                no_comma = true;
+                no_comma = false;
             else
                 token.pop_back();
             const auto sep = token.find_first_of("=");
@@ -348,10 +350,15 @@ Query parse(const std::string line) {
             q.where_cols.push_back(col);
             q.where_vals.push_back(stoll(val));
         }
+        query_format_check(!q.where_cols.empty(), "where list empty");
+        query_format_check(!no_comma, "no comma after where list");
     }
-    query_format_check(!q.where_cols.empty(), "where list empty");
-    dprintln(";");
-    return q;
+    if (ss.eof()) {
+        dprintln(";");
+        return q;
+    }
+    ss >> token;
+    query_format_check(false, "there's something after 'where': " + token);
 }
 // parse }}}
 // main loop {{{
