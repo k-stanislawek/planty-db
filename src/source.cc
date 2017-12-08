@@ -302,7 +302,7 @@ Query parse(const std::string line) {
     dprint("<select>");
     {
         bool no_comma = false;
-        while (no_comma == false) {
+        while (no_comma == false && !ss.eof()) {
             ss >> token;
             if (token.back() != ',')
                 no_comma = true;
@@ -310,8 +310,6 @@ Query parse(const std::string line) {
                 token.pop_back();
             dprint(" [" + token + "]");
             q.select_cols.push_back(token);
-            if (ss.eof())
-                break;
         }
     }
     if (!ss.eof()) {
@@ -325,7 +323,7 @@ Query parse(const std::string line) {
     dprint(" <where>");
     {
         bool no_comma = false;
-        while (no_comma == false) {
+        while (no_comma == false && !ss.eof()) {
             ss >> token;
             if (token.back() != ',')
                 no_comma = true;
@@ -336,8 +334,6 @@ Query parse(const std::string line) {
             const auto val = token.substr(sep + 1, isize(token) - sep - 1);
             dprint(" (" + col + "<=>" + val + ")");
             q.where_cols.push_back(col);
-            if (ss.eof())
-                break;
             q.where_vals.push_back(stoll(val));
         }
     }
