@@ -34,18 +34,18 @@ template <typename TOut, typename F, typename TIn> std::vector<TOut> sorted(cons
 // class traits {{{
 template<class...> using void_t = void;
 template <class, class = void> struct has_repr : std::false_type {};
-template <class T> struct has_repr<T, void_t<decltype(std::declval<T>()._repr())>> : std::false_type {};
+template <class T> struct has_repr<T, void_t<decltype(std::declval<T>()._repr())>> : std::true_type {};
 template <class, class = void> struct has_str : std::false_type {};
-template <class T> struct has_str<T, void_t<decltype(std::declval<T>()._str())>> : std::false_type {};
+template <class T> struct has_str<T, void_t<decltype(std::declval<T>()._str())>> : std::true_type {};
 template <class, class = void> struct has_read : std::false_type {};
-template <class T> struct has_read<T, void_t<decltype(std::declval<T>()._read())>> : std::false_type {};
+template <class T> struct has_read<T, void_t<decltype(std::declval<T>()._read())>> : std::true_type {};
 template <class, class = void> struct is_map : std::false_type {};
-template <class T> struct is_map<T, void_t<typename T::key_type, typename T::mapped_type>> : std::false_type {};
+template <class T> struct is_map<T, void_t<typename T::key_type, typename T::mapped_type>> : std::true_type {};
 template <class, class = void> struct is_set : std::false_type {};
-template <class T> struct is_set<T, void_t<typename T::key_type>> : std::false_type {};
+template <class T> struct is_set<T, void_t<typename T::key_type>> : std::true_type {};
 // }}}
 // str {{{
-template <typename T, class = void> struct _Str { std::string operator()(const T& t) { return to_string(t); } };
+template <typename T, class = void> struct _Str { std::string operator()(const T& t) { return std::to_string(t); } };
 template <> struct _Str<std::string> { std::string operator()(const std::string& t) { return t; } };
 template <> struct _Str<const char*> { std::string operator()(const char* t) { return t; } };
 template <typename T> std::string str(const T& t) { return _Str<T>()(t); }

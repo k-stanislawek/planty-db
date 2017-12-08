@@ -187,12 +187,12 @@ public:
         massert(!columns_.empty(), "empty header");
         auto column_it = columns_.begin();
         for (auto elem = *frame; !frame.end(); elem = *(++frame)) {
-            dprintln("elem", elem);
             (*column_it)->push_back(elem);
             if (++column_it == columns_.end()) column_it = columns_.begin();
         }
         if (column_it != columns_.begin())
             throw InputFrame::IntegrityError("File was incomplete");
+        dprintln("rows:", rows_count(), "columns:", columns_count());
 #ifndef NDEBUG
         for (auto& column : columns_)
             massert(column->count() == columns_.front()->count(), "wrong column length: " + column->name());
@@ -280,73 +280,75 @@ private:
     Table& table_;
 };
 // }}}
-// main loop {{{
-struct CmdArgs {
-    std::string filename;
-};
+// parse {{{
 struct Query {
     vstr where_cols;
     vi64 where_vals;
     vstr select_cols;
+    auto _repr() const { return make_repr("Query", {"where_cols", "where_vals", "select_cols"}, where_cols, where_vals, select_cols); }
 };
-
 struct ParseError : public std::runtime_error { ParseError(std::string error) : std::runtime_error(error) {} };
-
 Query parse(const std::string line) {
     Query q;
     std::stringstream ss(line);
     std::string token;
+    dprintln("  parse begins");
     if (!ss.eof()) {
         ss >> token;
-        dprintln(token);
         if (token != "select")
             throw ParseError("no select at the beginning");
     } else
         throw ParseError("empty line");
+    dprint("<select>");
     {
         bool no_comma = false;
         while (no_comma == false) {
             ss >> token;
-            dprintln(token);
             if (token.back() != ',')
                 no_comma = true;
             else
                 token.pop_back();
+            dprint(" [" + token + "]");
             q.select_cols.push_back(token);
             if (ss.eof())
                 break;
         }
     }
-    dprintln("where phase");
     if (!ss.eof()) {
         ss >> token;
-        dprintln(token);
         if (token != "where")
             throw ParseError("no where after selects: " + token);
-    } else
+    } else {
+        dprintln(";");
         return q; // where can be empty
-    dprintln("where values");
+    }
+    dprint(" <where>");
     {
         bool no_comma = false;
         while (no_comma == false) {
             ss >> token;
-            dprintln(token);
             if (token.back() != ',')
                 no_comma = true;
             else
                 token.pop_back();
             const auto sep = token.find_first_of("=");
             const auto col = token.substr(0, sep);
-            const value_t val = stoll(token.substr(sep + 1, isize(token) - sep - 1));
+            const auto val = token.substr(sep + 1, isize(token) - sep - 1);
+            dprint(" (" + col + "<=>" + val + ")");
             q.where_cols.push_back(col);
-            q.where_vals.push_back(val);
             if (ss.eof())
                 break;
+            q.where_vals.push_back(stoll(val));
         }
     }
+    dprintln(";");
     return q;
 }
-
+// parse }}}
+// main loop {{{
+struct CmdArgs {
+    std::string filename;
+};
 void main_loop(const CmdArgs& args) {
     Table tbl;
     std::ifstream ifs(args.filename);
@@ -358,7 +360,7 @@ void main_loop(const CmdArgs& args) {
         println();
         auto q = parse(line);
         OutputFrame outp(std::cout);
-        dprintln(q.where_cols, q.where_vals, q.select_cols);
+        dprintln(repr(q));
         t.run(q.where_cols, q.where_vals, q.select_cols, outp);
         dprintln();
     }
