@@ -309,7 +309,6 @@ Query parse(const std::string line) {
     Query q;
     std::stringstream ss(line);
     std::string token;
-    dprintln("  parse begins");
     query_format_check(!ss.eof(), "empty line");
     ss >> token;
     query_format_check(token == "select", "no select at the beginning");
