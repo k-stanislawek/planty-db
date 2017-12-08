@@ -10,13 +10,13 @@ deps = source.cc Makefile $(headers)
 default: debug.e
 
 debug.e: $(deps)
-	$(CC) $< -o $@ ${FLAGS_DEBUG} -I${cflib}
+	$(CC) $< -o $@ ${FLAGS_DEBUG}
 
-verbose.e: $(deps)
-	$(CC) $< -o $@ ${FLAGS_DEBUG} -DVERBOSE_PRINTS -I${cflib}
+clang.e: $(deps)
+	clang++-5.0 $< -o $@ ${FLAGS_DEBUG}
 
 release.e: $(deps)
-	$(CC) $< -o $@ ${FLAGS_RELEASE} -I${cflib}
+	$(CC) $< -o $@ ${FLAGS_RELEASE}
 
 all: $(default) verbose.e release.e
 
@@ -26,4 +26,4 @@ coverage: debug.e
 	firefox -new-window html/index.html
 
 clean:
-	rm -rf html *.e *.gcno *.gcda lcov.info
+	rm -rf html *.e *.gcno *.gcda lcov.info a.out
