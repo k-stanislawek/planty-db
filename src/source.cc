@@ -353,6 +353,10 @@ void main_loop(const CmdArgs& args) {
     TablePlayground t(tbl);
     std::string line;
     while (std::getline(std::cin, line)) {
+        if (line.empty()) {
+            dprintln("empty line");
+            continue;
+        }
         println();
         auto q = parse(line);
         OutputFrame outp(std::cout);
