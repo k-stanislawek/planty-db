@@ -1,5 +1,3 @@
 select col where col=10, col=20
 select col where col=10
 select col where
-select
-select where

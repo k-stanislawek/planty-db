@@ -12,6 +12,21 @@ using cnames = std::vector<std::string>;
 // and still we want to differentiate columns with the same name
 // for now, we use cname for id's purposes
 
+
+// {{{ exceptions and checks definitions
+#define exception_check(ERROR_NAME, COND, MSG) do { if (!(COND)) throw ERROR_NAME(MSG); } while(0)
+#define add_exception(ERROR_NAME, PARENT) struct ERROR_NAME : public PARENT { ERROR_NAME(std::string error) : PARENT(error) {} }
+
+add_exception(data_error, std::runtime_error);
+add_exception(query_format_error, data_error);
+#define query_format_check(COND, MSG) exception_check(query_format_error, COND, MSG)
+add_exception(table_error, data_error);
+#define table_check(COND, MSG) exception_check(table_error, COND, MSG)
+add_exception(query_semantics_error, data_error);
+#define query_semantics_check(COND, MSG) exception_check(query_semantics_error, COND, MSG)
+#undef add_exception
+// }}}
+
 class RowRange {
 friend class RowNumbers;
 friend class RowNumbersIterator;
@@ -127,7 +142,6 @@ private:
 // input, output frame {{{zo
 class InputFrame {
 public:
-    struct IntegrityError : public std::runtime_error { using std::runtime_error::runtime_error; };
     InputFrame(std::istream& is) : is_(is) {
     }
     vstr get_header() {
@@ -138,9 +152,7 @@ public:
             is_ >> s;
             header.push_back(s);
             is_.read(&sep, 1);
-            if (sep != '\n' && sep != '\t' && sep != ' ') {
-                throw InputFrame::IntegrityError(std::string("Bad separator: ascii code ") + std::to_string(static_cast<int>(sep)));
-            }
+            table_check(!(sep != '\n' && sep != '\t' && sep != ' '), std::string("Bad separator: ascii code ") + std::to_string(static_cast<int>(sep)));
         }
         dprintln("header", header);
         ++(*this);
@@ -158,7 +170,7 @@ public:
     OutputFrame(std::ostream& os) : os_(os) {
     }
     void add_header(const vstr& header) {
-        massert(!header.empty(), "header can't be empty");
+        table_check(!header.empty(), "header can't be empty");
         os_ << header[0];
         for (i64 i = 1; i < isize(header); i++)
             os_ << ' ' << header[i];
@@ -185,24 +197,20 @@ public:
             columns_[i] = IntColumn::make();
             columns_[i]->name() = header[i];
         }
-        massert(!columns_.empty(), "empty header");
+        table_check(!columns_.empty(), "empty header");
         auto column_it = columns_.begin();
         for (auto elem = *frame; !frame.end(); elem = *(++frame)) {
             (*column_it)->push_back(elem);
             if (++column_it == columns_.end()) column_it = columns_.begin();
         }
-        if (column_it != columns_.begin())
-            throw InputFrame::IntegrityError("File was incomplete");
+        table_check(column_it == columns_.begin(), "File was incomplete");
         dprintln("rows:", rows_count(), "columns:", columns_count());
-#ifndef NDEBUG
-        for (auto& column : columns_)
-            massert(column->rows_count() == columns_.front()->rows_count(), "wrong column length: " + column->name());
-#endif
     }
     void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
         frame.add_header(names);
         const auto columns = resolve_columns_(names);
         const size_t columns_count = columns.size();
+        // TODO add this check to "query" class
         massert(columns_count > 0, "can't select 0 columns");
         for (const auto row_num : rows) {
             frame.new_row(columns_[columns[0]]->ref(row_num));
@@ -227,12 +235,11 @@ private:
                 [this](const auto& name){ return this->resolve_column_(name); });
         return columns;
     }
-    index_t resolve_column_(const cname& name) const noexcept {
+    index_t resolve_column_(const cname& name) const {
         for (i64 i = 0; i < isize(columns_); i++)
             if (columns_[i]->name() == name)
                 return i;
-        massert(false, "Unknown column name: " + name);
-        return 0;
+        throw query_semantics_error("unknown column name: " + name);
     }
     std::vector<std::string> header_key_;
     std::vector<IntColumn::ptr> columns_;
@@ -244,6 +251,7 @@ public:
     TablePlayground(Table& table) : table_(table) {}
     void run(vstr& where_cols, vi64& where_vals, vstr& select_cols, OutputFrame& outp) {
         RowNumbers rows(table_.rows_count());
+        // TODO add this check to "query" class
         massert(where_cols.size() == where_vals.size(), "different cols and vals len");
         std::vector<std::vector<value_t>> filters(table_.columns_count());
         for (i64 i = 0; i < isize(where_cols); i++) {
@@ -289,18 +297,14 @@ struct Query {
     vstr select_cols;
     auto _repr() const { return make_repr("Query", {"where_cols", "where_vals", "select_cols"}, where_cols, where_vals, select_cols); }
 };
-struct ParseError : public std::runtime_error { ParseError(std::string error) : std::runtime_error(error) {} };
 Query parse(const std::string line) {
     Query q;
     std::stringstream ss(line);
     std::string token;
     dprintln("  parse begins");
-    if (!ss.eof()) {
-        ss >> token;
-        if (token != "select")
-            throw ParseError("no select at the beginning");
-    } else
-        throw ParseError("empty line");
+    query_format_check(!ss.eof(), "empty line");
+    ss >> token;
+    query_format_check(token == "select", "no select at the beginning");
     dprint("<select>");
     {
         bool no_comma = false;
@@ -314,16 +318,13 @@ Query parse(const std::string line) {
             q.select_cols.push_back(token);
         }
     }
-    if (q.select_cols.empty())
-        throw ParseError("select list empty");
-    if (!ss.eof()) {
-        ss >> token;
-        if (token != "where")
-            throw ParseError("no where after selects: " + token);
-    } else {
-        dprintln(";");
-        return q; // where can be empty
+    query_format_check(!q.select_cols.empty(), "select list empty");
+    if (ss.eof()) {
+        dprintln(';');
+        return q;
     }
+    ss >> token;
+    query_format_check(token == "where", "something else than 'where' after select list: " + token);
     dprint(" <where>");
     {
         bool no_comma = false;
@@ -341,6 +342,7 @@ Query parse(const std::string line) {
             q.where_vals.push_back(stoll(val));
         }
     }
+    query_format_check(!q.where_cols.empty(), "where list empty");
     dprintln(";");
     return q;
 }
@@ -357,16 +359,17 @@ void main_loop(const CmdArgs& args) {
     TablePlayground t(tbl);
     std::string line;
     while (std::getline(std::cin, line)) {
-        if (line.empty()) {
-            dprintln("empty line");
-            continue;
+        try {
+            println();
+            auto q = parse(line);
+            OutputFrame outp(std::cout);
+            dprintln(repr(q));
+            t.run(q.where_cols, q.where_vals, q.select_cols, outp);
+            dprintln();
+        } catch (const data_error& e) {
+            dprintln();
+            println("query error:", e.what());
         }
-        println();
-        auto q = parse(line);
-        OutputFrame outp(std::cout);
-        dprintln(repr(q));
-        t.run(q.where_cols, q.where_vals, q.select_cols, outp);
-        dprintln();
     }
 }
 // }}}
