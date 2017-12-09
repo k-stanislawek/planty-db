@@ -1,0 +1,2 @@
+
+query: select col1 where col1=13, col1=69

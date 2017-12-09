@@ -1,0 +1,1 @@
+select col1, col2 where col1=1, col2=1

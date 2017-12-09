@@ -13,7 +13,7 @@ using cnames = std::vector<std::string>;
 // for now, we use cname for id's purposes
 
 
-#define lprintln(...) lprintln("log:", __VA_ARGS__)
+#define lprintln(...) lprintln("log:", __VA_ARGS__); println("log:", __VA_ARGS__)
 
 // {{{ exceptions and checks definitions
 #define exception_check(ERROR_NAME, COND, MSG) do { if (!(COND)) throw ERROR_NAME(MSG); } while(0)
@@ -437,6 +437,7 @@ void main_loop(const CmdArgs& args) {
             println();
             auto q = parse(line);
             tbl.validate(q);
+            println("query:", line);
             OutputFrame outp(std::cout);
             dprintln(repr(q));
             t.run(q.where_cols, q.where_vals, q.select_cols, outp);

@@ -1,18 +1,28 @@
 #!/bin/bash
 (
 cd $(dirname $( readlink -f $0))
-tests="10x2 1x4 2x2 syntax_errors semantics_errors no_values"
+echo cd $pwd
+tests="10x2 1x4 2x2 syntax_errors semantics_errors no_values key key2 key3"
+
+function run() {
+    suf=$1
+    shift
+    cmd="./debug.e $t.csv < $t.in 2> $t.err$suf > $t.out$suf"
+    echo
+    echo
+    echo $cmd
+    eval $cmd
+}
+
 for t in $tests; do
-    echo $t
     if [ "$1" == "apply" ]; then
-        ./debug.e $t.csv < $t.in 2> $t.err.full > $t.out
-        grep "^log:" $t.err.full.tmp > $t.err.logs
+        run
+        cat $t.out
     elif [ "$1" == "clean" ]; then
-        rm -f $t.*.tmp $t.*.full
+        rm -f $t.*.tmp
     else
-        ./debug.e $t.csv < $t.in 2> $t.err.full.tmp | diff $t.out -
-        grep "^log:" $t.err.full.tmp > $t.err.logs.tmp
-        diff $t.err.logs $t.err.logs.tmp
+        run .tmp
+        diff $t.out $t.out.tmp
     fi
 done
 )

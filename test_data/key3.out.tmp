@@ -1,0 +1,22 @@
+
+query: select col1, col2, col3, col4
+log: range scan for first 0 columns
+col1 col2 col3 col4
+0 0 0 0
+0 0 0 1
+0 0 1 0
+0 0 1 1
+0 1 0 0
+0 1 0 1
+0 1 1 0
+0 1 1 1
+1 0 0 0
+1 0 0 1
+1 0 1 0
+1 0 1 1
+1 1 0 0
+1 1 0 1
+1 1 1 0
+1 1 1 1
+
+query: select col1, col2, col3, col4 where col1=0

@@ -1,0 +1,4 @@
+
+query: select a
+log: range scan for first 0 columns
+a

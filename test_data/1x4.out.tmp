@@ -1,0 +1,2 @@
+
+query: select col where col=10, col=20

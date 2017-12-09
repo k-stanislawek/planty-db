@@ -1,0 +1,17 @@
+Metadata(columns=["a","b","c"],key_len=0)
+rows: 1 columns: 3
+
+
+<select> [a] [where]
+<select> [a]
+<select> [a]
+<select> [a]
+<select> [where]
+<select>
+
+
+<select> [a] <where> (c<=>1)
+<select> [a] <where> (b<=>1)
+<select> [a] <where>
+
+
