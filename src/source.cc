@@ -74,27 +74,65 @@ private:
     cname name_;
 };
 
+class PredDef {
+public:
+    enum class Pred : char { less = '<', equal = '=', more = '>' };
+    static Pred pred_from_sep(char sep) {
+        if (sep == '<') return Pred::less;
+        if (sep == '=') return Pred::equal;
+        if (sep == '>') return Pred::more;
+        massert(false, "unknown sep: " + std::to_string(sep));
+        exit(42);
+    }
+    PredDef(Pred pred0, value_t pred_val0) : pred_(pred0), pred_val_(pred_val0) {}
+    Pred pred() const noexcept { return pred_; }
+    value_t pred_val() const noexcept { return pred_val_; }
+    auto _repr() const noexcept { return make_repr("PredDef", {"type", "val"}, static_cast<char>(pred_), pred_val_); }
+private:
+    Pred pred_;
+    value_t pred_val_;
+};
+
 class ColumnPredicate {
 public:
     using ptr = std::unique_ptr<ColumnPredicate>;
     template <typename ...Ts>
     static ptr make(const Ts&... ts) { return std::make_unique<ColumnPredicate>(ts...); }
-    enum class Pred { less = '<', equal = '=', more = '>' };
+    using Pred = PredDef::Pred;
+    ColumnPredicate(const IntColumn::ptr& col0, const PredDef& def) : ColumnPredicate(col0, def.pred(), def.pred_val()) {}
     ColumnPredicate(const IntColumn::ptr& col0, Pred pred0, value_t pred_val0)
         : col_(col0), pred_(pred0), pred_val_(pred_val0) 
     {
-        massert(pred_ == Pred::equal, "only equal pred supported");
     }
     RowRange filter(const RowRange& rng) const noexcept {
-        return col_->equal_range(rng, pred_val_);
+        auto result_range = col_->equal_range(rng, pred_val_);
+        switch (pred_) {
+            case Pred::equal:
+                return result_range;
+            case Pred::less:
+                return RowRange(rng.l(), result_range.l() - 1ll);
+            case Pred::more:
+                return RowRange(result_range.r() + 1ll, rng.r());
+        }
+        massert(false, std::to_string(static_cast<char>(pred_)));
+        exit(42);
     }
     bool match(const value_t& val) const noexcept {
-        return pred_val_ == val;
+        switch (pred_) {
+            case Pred::less:
+                return val < pred_val_;
+            case Pred::equal:
+                return val == pred_val_;
+            case Pred::more:
+                return val > pred_val_;
+        }
+        massert(false, std::to_string(static_cast<char>(pred_)));
+        exit(42);
     }
     
 private:
     const IntColumn::ptr& col_;
-    Pred pred_;
+    const Pred pred_;
     value_t pred_val_;
 };
 
@@ -268,9 +306,9 @@ private:
 // }}}
 struct Query {
     vstr where_cols;
-    vi64 where_vals;
+    std::vector<PredDef> where_preds;
     vstr select_cols;
-    auto _repr() const { return make_repr("Query", {"where_cols", "where_vals", "select_cols"}, where_cols, where_vals, select_cols); }
+    auto _repr() const { return make_repr("Query", {"where_cols", "where_preds", "select_cols"}, where_cols, where_preds, select_cols); }
 };
 class Table {
 public:
@@ -349,16 +387,15 @@ private:
 class TablePlayground {
 public:
     TablePlayground(Table& table) : table_(table) {}
-    void run(vstr& where_cols, vi64& where_vals, vstr& select_cols, OutputFrame& outp) {
+    void run(const Query& q, OutputFrame& outp) {
         RowNumbers rows(table_.rows_count());
         // TODO add this check to "query" class
-        massert(where_cols.size() == where_vals.size(), "different cols and vals len");
+        massert(q.where_cols.size() == q.where_preds.size(), "different cols and vals len");
         std::vector<std::vector<ColumnPredicate::ptr>> preds(table_.columns_count());
-        for (i64 i = 0; i < isize(where_cols); i++) {
-            const value_t value = where_vals[i];
-            const auto column_id = table_.column_id(where_cols[i]);
-            preds[column_id].push_back(ColumnPredicate::make(
-                        table_.column(column_id), ColumnPredicate::Pred::equal, value));
+        for (i64 i = 0; i < isize(q.where_cols); i++) {
+            const auto& pred = q.where_preds[i];
+            const auto column_id = table_.column_id(q.where_cols[i]);
+            preds[column_id].push_back(ColumnPredicate::make(table_.column(column_id), pred));
         }
         i64 fullscan_cid = 0;
         for (; fullscan_cid < table_.metadata().key_len(); fullscan_cid++) {
@@ -383,7 +420,7 @@ public:
             }
             rows.set_indices_set(std::move(remaining));
         }
-        table_.write(select_cols, rows, outp);
+        table_.write(q.select_cols, rows, outp);
     }
     void validate() const {
         const auto len = table_.metadata().key_len();
@@ -440,12 +477,14 @@ Query parse(const std::string line) {
                 no_comma = false;
             else
                 token.pop_back();
-            const auto sep = token.find_first_of("=");
+            const auto sep = token.find_first_of("=<>");
+            query_format_check(sep != std::string::npos, "<>= not found");
+            const auto sep_val = PredDef::pred_from_sep(token[sep]);
             const auto col = token.substr(0, sep);
             const auto val = token.substr(sep + 1, isize(token) - sep - 1);
-            dprint(" (" + col + "<=>" + val + ")");
+            dprint(" (" + col + "[" + token[sep] + "]" + val + ")");
             q.where_cols.push_back(col);
-            q.where_vals.push_back(stoll(val));
+            q.where_preds.emplace_back(sep_val, stoll(val));
         }
         query_format_check(!q.where_cols.empty(), "where list empty");
         query_format_check(!no_comma, "no comma after where list");
@@ -480,7 +519,7 @@ void main_loop(const CmdArgs& args) {
             println("query:", line);
             OutputFrame outp(std::cout);
             dprintln(repr(q));
-            t.run(q.where_cols, q.where_vals, q.select_cols, outp);
+            t.run(q, outp);
             dprintln();
         } catch (const data_error& e) {
             dprintln();
