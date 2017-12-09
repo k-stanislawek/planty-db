@@ -48,7 +48,7 @@ public:
     index_t& l() { return l_; }
     index_t r() const { return r_; }
     index_t& r() { return r_; }
-    size_t size() const { return static_cast<size_t>(r_ - l_ + 1); }
+    i64 len() const { return r_ - l_ + 1; }
     void normalize() { l_ = std::min(l_, r_ + 1); }
 private:
     index_t l_, r_;
@@ -277,12 +277,12 @@ public:
     void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
         frame.add_header(names);
         const auto columns = resolve_columns_(names);
-        const size_t columns_count = columns.size();
+        const auto columns_count = isize(columns);
         // TODO add this check to "query" class
         massert(columns_count > 0, "can't select 0 columns");
         for (const auto row_num : rows) {
             frame.new_row(columns_[columns[0]]->ref(row_num));
-            for (u64 i = 1; i < columns_count; i++)
+            for (i64 i = 1; i < columns_count; i++)
                 frame.add_to_row(columns_[columns[i]]->ref(row_num));
         }
     }
@@ -301,8 +301,8 @@ public:
         return columns_[column_id];
     }
     index_t column_id(const cname& name) const noexcept { return resolve_column_(name); }
-    size_t rows_count() const { return columns_[0]->rows_count(); }
-    size_t columns_count() const { return isize(columns_); }
+    i64 rows_count() const { return columns_[0]->rows_count(); }
+    i64 columns_count() const { return isize(columns_); }
     const Metadata& metadata() const noexcept { return metadata_; }
 private:
     indices_t resolve_columns_(const cnames& names) const {
@@ -363,6 +363,19 @@ public:
             rows.set_indices_set(std::move(remaining));
         }
         table_.write(select_cols, rows, outp);
+    }
+    void validate() const {
+        const auto len = table_.metadata().key_len();
+        vi64 prev_value;
+        for (i64 i = 0; i < table_.rows_count(); i++) {
+            vi64 current_value;
+            for (i64 j = 0; j < len; j++)
+                current_value.push_back(table_.column(j)->ref(i));
+            if (i != 0)
+                table_check(!vector_less(current_value, prev_value), 
+                    "row " + std::to_string(i) + "'s key is lesser than previous row ");
+            prev_value = std::move(current_value);
+        }
     }
 private:
     Table& table_;
@@ -434,6 +447,9 @@ void main_loop(const CmdArgs& args) {
     InputFrame file(ifs);
     auto tbl = Table::read(file);
     TablePlayground t(tbl);
+#ifndef NO_VALIDATION
+    t.validate();
+#endif
     std::string line;
     while (std::getline(std::cin, line)) {
         try {
