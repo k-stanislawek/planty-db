@@ -152,10 +152,10 @@ class Metadata {
 public:
     Metadata(vstr&& columns0, i64 key_len0) : columns_(columns0), key_len_(key_len0) {
         table_check(key_len_ <= isize(columns_), "key_len " + std::to_string(key_len_) + " exceeds header length " + std::to_string(isize(columns_)));
-        key_len_ = 1;
     }
     const auto& columns() const { return columns_; }
     const auto& key_len() const { return key_len_; }
+    auto _repr() const { return make_repr("Metadata", {"columns", "key_len"}, columns_, key_len_); }
 private:
     vstr columns_;
     i64 key_len_;
@@ -167,20 +167,45 @@ public:
     InputFrame(std::istream& is) : is_(is) {
     }
     Metadata get_metadata() {
-        return Metadata(get_header(), 0);
+        char sep = '\0';
+        vstr header;
+        i64 key_len = 0;
+        bool metadata_found = false;
+        while (sep != '\n' && !metadata_found) {
+            std::string s;
+            is_ >> s;
+            table_check(!is_.eof(), "empty header");
+            if (s.back() == ';') {
+                s.pop_back();
+                metadata_found = true;
+            }
+            header.push_back(s);
+            is_.read(&sep, 1);
+            table_check(!(sep != '\n' && sep != '\t' && sep != ' ' && sep != ';'),
+                    "Bad separator: ascii code " + std::to_string(static_cast<int>(sep)));
+        }
+        if (metadata_found)
+            is_ >> key_len;
+        ++(*this);
+        auto m = Metadata(std::move(header), std::move(key_len));
+        dprintln(repr(m));
+        return m;
     }
     vstr get_header() {
         char sep = '\0';
         vstr header;
-        while (sep != '\n') {
+        u64 key_len = 0;
+        while (sep != '\n' && sep != ';') {
             std::string s;
             is_ >> s;
             table_check(!is_.eof(), "empty header");
             header.push_back(s);
             is_.read(&sep, 1);
-            table_check(!(sep != '\n' && sep != '\t' && sep != ' '),
+            table_check(!(sep != '\n' && sep != '\t' && sep != ' ' && sep != ';'),
                     "Bad separator: ascii code " + std::to_string(static_cast<int>(sep)));
         }
+        if (sep == ';')
+            is_ >> key_len;
         dprintln("header", header);
         ++(*this);
         return header;

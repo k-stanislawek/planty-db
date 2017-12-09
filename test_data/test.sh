@@ -6,9 +6,9 @@ for t in $tests; do
     echo $t
     if [ "$1" == "apply" ]; then
         ./debug.e $t.csv < $t.in 2> $t.err.full > $t.out
-        grep "^log:" $t.err.full > $t.err.logs
+        grep "^log:" $t.err.full.tmp > $t.err.logs
     elif [ "$1" == "clean" ]; then
-        rm -f $t.*.tmp
+        rm -f $t.*.tmp $t.*.full
     else
         ./debug.e $t.csv < $t.in 2> $t.err.full.tmp | diff $t.out -
         grep "^log:" $t.err.full.tmp > $t.err.logs.tmp
