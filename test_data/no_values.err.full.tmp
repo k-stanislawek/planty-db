@@ -1,7 +1,0 @@
-Metadata(columns=["a"],key_len=0)
-rows: 0 columns: 1
-<select> [a];
-Query(where_cols=[],where_vals=[],select_cols=["a"])
-[[]]
-log: range scan for first 0 columns
-
