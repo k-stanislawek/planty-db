@@ -74,6 +74,30 @@ private:
     cname name_;
 };
 
+class ColumnPredicate {
+public:
+    using ptr = std::unique_ptr<ColumnPredicate>;
+    template <typename ...Ts>
+    static ptr make(const Ts&... ts) { return std::make_unique<ColumnPredicate>(ts...); }
+    enum class Pred { less = '<', equal = '=', more = '>' };
+    ColumnPredicate(const IntColumn::ptr& col0, Pred pred0, value_t pred_val0)
+        : col_(col0), pred_(pred0), pred_val_(pred_val0) 
+    {
+        massert(pred_ == Pred::equal, "only equal pred supported");
+    }
+    RowRange filter(const RowRange& rng) const noexcept {
+        return col_->equal_range(rng, pred_val_);
+    }
+    bool match(const value_t& val) const noexcept {
+        return pred_val_ == val;
+    }
+    
+private:
+    const IntColumn::ptr& col_;
+    Pred pred_;
+    value_t pred_val_;
+};
+
 namespace pred { // {{{
 template <class Pred> class Not;
 template <class ...Ps> class And;
@@ -329,36 +353,33 @@ public:
         RowNumbers rows(table_.rows_count());
         // TODO add this check to "query" class
         massert(where_cols.size() == where_vals.size(), "different cols and vals len");
-        std::vector<std::vector<value_t>> filters(table_.columns_count());
+        std::vector<std::vector<ColumnPredicate::ptr>> preds(table_.columns_count());
         for (i64 i = 0; i < isize(where_cols); i++) {
             const value_t value = where_vals[i];
             const auto column_id = table_.column_id(where_cols[i]);
-            filters[column_id].push_back(value);
+            preds[column_id].push_back(ColumnPredicate::make(
+                        table_.column(column_id), ColumnPredicate::Pred::equal, value));
         }
         i64 fullscan_cid = 0;
         for (; fullscan_cid < table_.metadata().key_len(); fullscan_cid++) {
-            if (filters[fullscan_cid].empty())
+            if (preds[fullscan_cid].empty())
                 break;
         }
-        dprintln(filters);
         lprintln("range scan for first " + std::to_string(fullscan_cid) + " columns");
         for (i64 column_id = 0; column_id < fullscan_cid; column_id++)
-            for (const auto value : filters[column_id])
-                rows.narrow(table_.column(column_id)->equal_range(rows.full_range(), value));
-
+            for (const auto& pred : preds[column_id])
+                rows.narrow(pred->filter(rows.full_range())); // todo something's wrong with this line
         {
-            for (i64 cid = fullscan_cid; cid < isize(filters); cid++)
-                std::sort(filters[cid].begin(), filters[cid].end());
             std::vector<index_t> remaining;
-            for (const auto value : rows) {
+            for (const auto row_id : rows) {
                 bool remains = true;
-                for (i64 column_id = fullscan_cid; column_id < isize(filters); column_id++) {
-                    remains &= filters[column_id].empty() ||
-                        (filters[column_id].size() == 1 && filters[column_id][0] == table_.column(column_id)->ref(value));
-//                    remains &= filters[column_id].empty() || std::binary_search(filters[column_id].begin(), filters[column_id].end(), table_.column(column_id)->ref(value));
+                for (i64 column_id = fullscan_cid; column_id < isize(preds); column_id++) {
+                    remains &= preds[column_id].empty() ||
+                        (preds[column_id].size() == 1 &&
+                         preds[column_id][0]->match(table_.column(column_id)->ref(row_id)));
                 }
                 if (remains)
-                    remaining.push_back(value);
+                    remaining.push_back(row_id);
             }
             rows.set_indices_set(std::move(remaining));
         }

@@ -2,16 +2,13 @@ Metadata(columns=["col"],key_len=1)
 rows: 4 columns: 1
 <select> [col] <where> (col<=>10) (col<=>20);
 Query(where_cols=["col","col"],where_vals=[10,20],select_cols=["col"])
-[[10,20]]
 log: range scan for first 1 columns
 
 <select> [col] <where> (col<=>30);
 Query(where_cols=["col"],where_vals=[30],select_cols=["col"])
-[[30]]
 log: range scan for first 1 columns
 
 <select> [col];
 Query(where_cols=[],where_vals=[],select_cols=["col"])
-[[]]
 log: range scan for first 0 columns
 

@@ -2,31 +2,25 @@ Metadata(columns=["col1","col2"],key_len=1)
 rows: 2 columns: 2
 <select> [col1] <where> (col1<=>13) (col1<=>69);
 Query(where_cols=["col1","col1"],where_vals=[13,69],select_cols=["col1"])
-[[13,69],[]]
 log: range scan for first 1 columns
 
 <select> [col1] <where> (col2<=>42);
 Query(where_cols=["col2"],where_vals=[42],select_cols=["col1"])
-[[],[42]]
 log: range scan for first 0 columns
 
 <select> [col1] [col2] <where> (col2<=>42);
 Query(where_cols=["col2"],where_vals=[42],select_cols=["col1","col2"])
-[[],[42]]
 log: range scan for first 0 columns
 
 <select> [col2];
 Query(where_cols=[],where_vals=[],select_cols=["col2"])
-[[],[]]
 log: range scan for first 0 columns
 
 <select> [col2] <where> (col1<=>13) (col2<=>42);
 Query(where_cols=["col1","col2"],where_vals=[13,42],select_cols=["col2"])
-[[13],[42]]
 log: range scan for first 1 columns
 
 <select> [col2] [col2];
 Query(where_cols=[],where_vals=[],select_cols=["col2","col2"])
-[[],[]]
 log: range scan for first 0 columns
 
