@@ -64,9 +64,9 @@ public:
     const value_t& ref(index_t index) const noexcept { bound_assert(index, data_); return data_[index]; }
     index_t rows_count() const noexcept { return isize(data_); }
     // todo implement
-    RowRange equal_range(value_t vall, value_t valr) const noexcept;
-    RowRange equal_range(value_t val) const noexcept {
-        auto r = std::equal_range(data_.begin(), data_.end(), val);
+    RowRange equal_range(const RowRange& rng, value_t vall, value_t valr) const noexcept;
+    RowRange equal_range(const RowRange& rng, value_t val) const noexcept {
+        auto r = std::equal_range(data_.begin() + rng.l(), data_.begin() + rng.r() + 1, val);
         return RowRange(r.first - data_.begin(), r.second - data_.begin() - 1);
     }
 private:
@@ -123,7 +123,10 @@ class RowNumbers {
 public:
     using iterator = RowNumbersIterator;
     RowNumbers(index_t len) : range_(0, len - 1), indices_set_used_(false) {}
-    RowRange full_range() const { return range_; }
+    RowRange full_range() const {
+        massert(!indices_set_used_, "for now, full_range() shouldn't be used with indices_set_used_");
+        return range_;
+    }
 
     iterator begin() const {
         return RowNumbersIterator(!indices_set_used_, indices_.cbegin(), range_);
@@ -341,7 +344,7 @@ public:
         lprintln("range scan for first " + std::to_string(fullscan_cid) + " columns");
         for (i64 column_id = 0; column_id < fullscan_cid; column_id++)
             for (const auto value : filters[column_id])
-                rows.narrow(table_.column(column_id)->equal_range(value));
+                rows.narrow(table_.column(column_id)->equal_range(rows.full_range(), value));
 
         {
             for (i64 cid = fullscan_cid; cid < isize(filters); cid++)
