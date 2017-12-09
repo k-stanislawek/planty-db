@@ -13,6 +13,8 @@ using cnames = std::vector<std::string>;
 // for now, we use cname for id's purposes
 
 
+#define lprintln(...) lprintln("log:", __VA_ARGS__)
+
 // {{{ exceptions and checks definitions
 #define exception_check(ERROR_NAME, COND, MSG) do { if (!(COND)) throw ERROR_NAME(MSG); } while(0)
 #define add_exception(ERROR_NAME, PARENT) struct ERROR_NAME : public PARENT { ERROR_NAME(std::string error) : PARENT(error) {} }
@@ -150,12 +152,13 @@ class Metadata {
 public:
     Metadata(vstr&& columns0, i64 key_len0) : columns_(columns0), key_len_(key_len0) {
         table_check(key_len_ <= isize(columns_), "key_len " + std::to_string(key_len_) + " exceeds header length " + std::to_string(isize(columns_)));
+        key_len_ = 1;
     }
     const auto& columns() const { return columns_; }
     const auto& key_len() const { return key_len_; }
 private:
-    vstr columns_ = {};
-    i64 key_len_ = 0;
+    vstr columns_;
+    i64 key_len_;
 };
 // }}}
 // input, output frame {{{
@@ -272,6 +275,7 @@ public:
     index_t column_id(const cname& name) const noexcept { return resolve_column_(name); }
     size_t rows_count() const { return columns_[0]->rows_count(); }
     size_t columns_count() const { return isize(columns_); }
+    const Metadata& metadata() const noexcept { return metadata_; }
 private:
     indices_t resolve_columns_(const cnames& names) const {
         indices_t columns;
@@ -284,7 +288,6 @@ private:
             if (columns_[i]->name() == name)
                 return i;
         table_check(false, "unknown column name: " + name); 
-        return 0;
     }
     Metadata metadata_;
     std::vector<IntColumn::ptr> columns_;
@@ -304,26 +307,28 @@ public:
             const auto column_id = table_.column_id(where_cols[i]);
             filters[column_id].push_back(value);
         }
-        i64 first_non_range_column_id = isize(filters);
-        for (i64 column_id = 0; column_id < isize(filters); column_id++) {
-            const auto& column = table_.column(column_id);
-            if (filters[column_id].empty()) {
-                first_non_range_column_id = column_id;
+        i64 fullscan_cid = 0;
+        for (; fullscan_cid < table_.metadata().key_len(); fullscan_cid++) {
+            if (filters[fullscan_cid].empty())
                 break;
-            }
-            for (const auto value : filters[column_id])
-                rows.narrow(column->equal_range(value));
         }
+        dprintln(filters);
+        lprintln("range scan for first " + std::to_string(fullscan_cid) + " columns");
+        for (i64 column_id = 0; column_id < fullscan_cid; column_id++)
+            for (const auto value : filters[column_id])
+                rows.narrow(table_.column(column_id)->equal_range(value));
+
         {
-            for (auto& values : filters)
-                std::sort(values.begin(), values.end());
+            for (i64 cid = fullscan_cid; cid < isize(filters); cid++)
+                std::sort(filters[cid].begin(), filters[cid].end());
             std::vector<index_t> remaining;
             for (const auto value : rows) {
                 bool remains = true;
-                for (i64 column_id = first_non_range_column_id; column_id < isize(filters); column_id++)
+                for (i64 column_id = fullscan_cid; column_id < isize(filters); column_id++) {
                     remains &= filters[column_id].empty() ||
                         (filters[column_id].size() == 1 && filters[column_id][0] == table_.column(column_id)->ref(value));
-                    //remains &= filters[column_id].empty() || std::binary_search(filters[column_id].begin(), filters[column_id].end(), table_.column(column_id)->ref(value));
+//                    remains &= filters[column_id].empty() || std::binary_search(filters[column_id].begin(), filters[column_id].end(), table_.column(column_id)->ref(value));
+                }
                 if (remains)
                     remaining.push_back(value);
             }
