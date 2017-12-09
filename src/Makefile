@@ -1,4 +1,4 @@
-FLAGS_COMMON=-std=c++17 -Wall -Wextra -pedantic -Wshadow -Wfloat-equal -Wswitch-default -Winit-self
+FLAGS_COMMON=-std=c++17 -Wall -Wextra -pedantic -Wshadow -Wfloat-equal -Winit-self
 FLAGS_DEBUG=$(FLAGS_COMMON) -O0 -g -DDEBUG_PRINTS -coverage -ftrapv -fsanitize=address
 FLAGS_RELEASE=$(FLAGS_COMMON) -O3
 
