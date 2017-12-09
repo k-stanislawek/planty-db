@@ -14,3 +14,21 @@ log: range scan for first 0 columns
 c3 c4
 
 query: select c5, c7 where c0=0
+log: range scan for first 1 columns
+c5 c7
+5 7
+
+query: select c5, c7 where c0=0, c1=1
+log: range scan for first 2 columns
+c5 c7
+5 7
+
+query: select c5, c7 where c0=0, c1=1, c2=2
+log: range scan for first 3 columns
+c5 c7
+5 7
+
+query: select c5, c7 where c0=0, c1=1, c2=2, c3=3
+log: range scan for first 3 columns
+c5 c7
+5 7

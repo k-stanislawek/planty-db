@@ -1,2 +1,5 @@
 
 query: select col1, col2 where col1=1, col2=1
+log: range scan for first 1 columns
+col1 col2
+1 1

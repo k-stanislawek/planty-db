@@ -1,2 +1,17 @@
 
 query: select col where col=10, col=20
+log: range scan for first 1 columns
+col
+
+query: select col where col=30
+log: range scan for first 1 columns
+col
+30
+
+query: select col
+log: range scan for first 0 columns
+col
+10
+20
+30
+40
