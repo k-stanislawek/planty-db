@@ -10,8 +10,8 @@ rows: 1 columns: 3
 <select>
 
 
-<select> [a] <where> (c<=>1)
-<select> [a] <where> (b<=>1)
+<select> [a] <where> c=1
+<select> [a] <where> b=1
 <select> [a] <where>
 
 

@@ -1,7 +1,6 @@
 Metadata(columns=["a"],key_len=0)
 rows: 0 columns: 1
 <select> [a];
-Query(where_cols=[],where_vals=[],select_cols=["a"])
-[[]]
+Query(where_preds=[],select_cols=[ColumnHandle(column=IntColumn(name="a",length=0))])
 log: range scan for first 0 columns
 

@@ -85,6 +85,10 @@ template <class T1, class T2> struct _Str<std::pair<T1, T2>> { std::string opera
 template <typename T, class = void> struct _Repr { std::string operator()(const T& t) { return str(t); } };
 template <typename T> std::string repr(const T& t) { return _Repr<T>()(t); }
 template <> struct _Repr<std::string> { std::string operator()(const std::string& t) { return '"' + t + '"'; } };
+template <typename T> struct _Repr<std::unique_ptr<T>> { std::string operator()(const std::unique_ptr<T>& t) {
+    massert(t, "uninitialized pointer in repr");
+    return repr(*t);
+}};
 template <> struct _Repr<const char*> { std::string operator()(const char* const& t) { return repr(std::string(t)); } };
 template <typename T> struct _Repr<T, std::enable_if_t<has_repr<T>::value>> { std::string operator()(const T& t) {
     return t._repr();

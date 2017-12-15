@@ -2,7 +2,7 @@
 (
 cd $(dirname $( readlink -f $0))
 echo cd $PWD
-tests="10x2 1x4 2x2 syntax_errors semantics_errors no_values key key2 key3"
+tests="10x2 1x4 2x2 syntax_errors semantics_errors no_values key key2 key3 moreless"
 
 function run() {
     suf=$1
