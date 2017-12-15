@@ -2,5 +2,6 @@ Metadata(columns=["a"],key_len=0)
 rows: 0 columns: 1
 <select> [a];
 Query(where_preds=[],select_cols=[ColumnHandle(column=IntColumn(name="a",length=0))])
-log: range scan for first 0 columns
+log: range scan for columns 0..-1
+log: full scan for remaining rows: RowRange(l=0,r=-1)
 

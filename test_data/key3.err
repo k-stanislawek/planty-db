@@ -2,157 +2,196 @@ Metadata(columns=["col1","col2","col3","col4"],key_len=3)
 rows: 16 columns: 4
 <select> [col1] [col2] [col3] [col4];
 Query(where_preds=[],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 0 columns
+log: range scan for columns 0..0
+log: full scan for remaining rows: RowRange(l=0,r=15)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 1 columns
+log: range scan for columns 0..1
+log: full scan for remaining rows: RowRange(l=0,r=7)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 1 columns
+log: range scan for columns 0..1
+log: full scan for remaining rows: RowRange(l=8,r=15)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=0,r=3)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=4,r=7)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=8,r=11)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=12,r=15)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0 col3=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=0,r=1)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0 col3=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=2,r=3)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1 col3=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=4,r=5)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1 col3=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=6,r=7)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0 col3=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=8,r=9)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0 col3=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=10,r=11)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1 col3=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=12,r=13)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1 col3=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=14,r=15)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0 col3=0 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=0,r=1)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0 col3=0 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=0,r=1)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0 col3=1 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=2,r=3)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0 col3=1 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=2,r=3)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1 col3=0 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=4,r=5)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1 col3=0 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=4,r=5)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1 col3=1 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=6,r=7)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1 col3=1 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=6,r=7)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0 col3=0 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=8,r=9)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0 col3=0 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=8,r=9)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0 col3=1 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=10,r=11)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0 col3=1 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=10,r=11)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1 col3=0 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=12,r=13)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1 col3=0 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=12,r=13)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1 col3=1 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=14,r=15)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1 col3=1 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col3",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 3 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=14,r=15)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=0,r=3)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=0 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=0,r=3)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=4,r=7)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=0 col2=1 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=4,r=7)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=8,r=11)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=0 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=0),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=8,r=11)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1 col4=0;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=0)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=12,r=15)
 
 <select> [col1] [col2] [col3] [col4] <where> col1=1 col2=1 col4=1;
 Query(where_preds=[ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col1",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col2",length=16)),predicate==,right_arg=1),ColumnPredicate(column=ColumnHandle(column=IntColumn(name="col4",length=16)),predicate==,right_arg=1)],select_cols=[ColumnHandle(column=IntColumn(name="col1",length=16)),ColumnHandle(column=IntColumn(name="col2",length=16)),ColumnHandle(column=IntColumn(name="col3",length=16)),ColumnHandle(column=IntColumn(name="col4",length=16))])
-log: range scan for first 2 columns
+log: range scan for columns 0..2
+log: full scan for remaining rows: RowRange(l=12,r=15)
 

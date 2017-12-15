@@ -410,6 +410,9 @@ public:
     bool match_row_id(const index_t& idx) const noexcept {
         return match_value(col_.ref().at(idx));
     }
+    bool can_be_range_filtered() const noexcept {
+        return true; // can be false for e.g. LIKE predicate for std::string
+    }
     const ColumnHandle& column() const { return col_; }
     const PredOp& pred() const { return pred_; }
     auto _repr() const { return make_repr("ColumnPredicate", {"column", "predicate", "right_arg"}, col_, pred_, right_arg_.value()); }
@@ -427,6 +430,25 @@ struct Query {
 };
 
 // table playground {{{
+
+index_t get_first_fullscan_column_id(index_t key_len, const std::vector<std::vector<ColumnPredicate::ref>>& preds) {
+    for (i64 i = 0; i < key_len; i++) {
+        bool can_be_range_filtered = true;
+        bool matches_single_element = false;
+        for (const auto& pred : preds[i]) {
+            if (pred.get().pred().is_single_elem())
+                matches_single_element = true;
+            if (!pred.get().can_be_range_filtered())
+                can_be_range_filtered = false;
+        } 
+        if (!can_be_range_filtered)
+            return i;
+        if (!matches_single_element)
+            return i + 1;
+    }
+    return key_len;
+}
+
 class TablePlayground {
 public:
     TablePlayground(Table& table) : table_(table) {}
@@ -437,24 +459,18 @@ public:
             auto& pred = q.where_preds[i];
             preds[pred->column().id()].push_back(*pred);
         }
-        i64 fullscan_cid = 0;
-        for (; fullscan_cid < table_.metadata().key_len(); fullscan_cid++) {
-            bool is_pred_single_elem = false;
-            for (const auto& pred : preds[fullscan_cid])
-                if (pred.get().pred().is_single_elem())
-                    is_pred_single_elem = true;
-            if (!is_pred_single_elem)
-                break;
-        }
-        lprintln("range scan for first " + std::to_string(fullscan_cid) + " columns");
-        for (i64 column_id = 0; column_id < fullscan_cid; column_id++)
+        const auto first_fullscan_column_id = get_first_fullscan_column_id(table_.metadata().key_len(), preds);
+        lprintln("range scan for columns 0.." + std::to_string(first_fullscan_column_id - 1));
+        for (i64 column_id = 0; column_id < first_fullscan_column_id; column_id++)
             for (const auto& pred : preds[column_id])
                 rows.narrow(pred.get().filter(rows.full_range())); // todo something's wrong with this line
+        
+        lprintln("full scan for remaining rows: " + repr(rows.full_range()));
         {
             std::vector<index_t> remaining;
             for (const auto row_id : rows) {
                 bool remains = true;
-                for (i64 column_id = fullscan_cid; column_id < isize(preds); column_id++)
+                for (i64 column_id = first_fullscan_column_id; column_id < isize(preds); column_id++)
                     for (const auto& pred : preds[column_id])
                         remains &= pred.get().match_row_id(row_id);
                 if (remains)
