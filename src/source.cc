@@ -409,6 +409,9 @@ public:
         ColumnBinding left_arg(col_.ref(), rng);
         return pred_.filter(left_arg, right_arg_);
     }
+    void filter(RowNumbers& rows) const noexcept {
+        rows.narrow(filter(rows.full_range()));
+    }
     bool match_value(const value_t& val) const noexcept {
         return pred_.match(val, right_arg_);
     }
@@ -433,55 +436,79 @@ struct Query { // {{{
     std::vector<ColumnHandle> select_cols;
     auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_preds, select_cols); }
 }; // }}}
-// table playground {{{
-index_t get_first_fullscan_column_id(index_t key_len, const std::vector<std::vector<ColumnPredicate::ref>>& preds) {
-    for (i64 i = 0; i < key_len; i++) {
-        bool can_be_range_filtered = true;
-        bool matches_single_element = false;
-        for (const auto& pred : preds[i]) {
-            if (pred.get().pred().is_single_elem())
-                matches_single_element = true;
-            if (!pred.get().can_be_range_filtered())
-                can_be_range_filtered = false;
-        } 
-        if (!can_be_range_filtered)
-            return i;
-        if (!matches_single_element)
-            return i + 1;
+class TablePlayground { // table playground {{{
+    static index_t get_first_fullscan_column_id_(index_t key_len, const std::vector<std::vector<ColumnPredicate::ref>>& preds) {
+        for (i64 i = 0; i < key_len; i++) {
+            bool can_be_range_filtered = true;
+            bool matches_single_element = false;
+            for (const auto& pred : preds[i]) {
+                if (pred.get().pred().is_single_elem())
+                    matches_single_element = true;
+                if (!pred.get().can_be_range_filtered())
+                    can_be_range_filtered = false;
+            } 
+            if (!can_be_range_filtered)
+                return i;
+            if (!matches_single_element)
+                return i + 1;
+        }
+        return key_len;
     }
-    return key_len;
-}
-
-class TablePlayground {
+    static std::vector<std::vector<ColumnPredicate::ref>> group_preds_by_column_(const std::vector<ColumnPredicate::ptr>& where_preds, index_t columns_count) {
+        std::vector<std::vector<ColumnPredicate::ref>> preds(columns_count);
+        for (i64 i = 0; i < isize(where_preds); i++) {
+            auto& pred = where_preds[i];
+            massert2(pred->column().id() < isize(preds));
+            preds[pred->column().id()].push_back(*pred);
+        }
+        return preds;
+    }
+    template <typename It>
+    static void narrow_by_range_(RowNumbers& rows, const It preds_begin, const It preds_end) {
+        for (auto it = preds_begin; it != preds_end; it++)
+            for (const auto& pred : *it)
+                pred.get().filter(rows);
+    }
+    template <typename It>
+    static bool has_any_predicates(const It preds_begin, const It preds_end) {
+        for (auto it = preds_begin; it != preds_end; it++)
+            if (!it->empty())
+                return true;
+        return false;
+    }
+    template <typename It>
+    static void narrow_by_scan(RowNumbers& rows, const It preds_begin, const It preds_end) {
+        if (!has_any_predicates(preds_begin, preds_end))
+            return;
+        std::vector<index_t> remaining;
+        for (const auto row_id : rows) {
+            bool remains = true;
+            for (auto it = preds_begin; it != preds_end; it++)
+                for (const auto& pred : *it)
+                    remains &= pred.get().match_row_id(row_id);
+            if (remains)
+                remaining.push_back(row_id);
+        }
+        rows.set_indices_set(std::move(remaining));
+    }
+    RowNumbers perform_where_(const std::vector<ColumnPredicate::ptr>& where_preds) {
+        RowNumbers rows(table_.rows_count());
+        const auto preds = group_preds_by_column_(where_preds, table_.columns_count());
+        const auto first_fullscan_column_id = get_first_fullscan_column_id_(table_.metadata().key_len(), preds);
+        lprintln("range scan for columns 0.." + std::to_string(first_fullscan_column_id - 1));
+        narrow_by_range_(rows, preds.begin(), preds.begin() + first_fullscan_column_id);
+        lprintln("full scan for remaining rows: " + repr(rows.full_range()));
+        narrow_by_scan(rows, preds.begin() + first_fullscan_column_id, preds.end());
+        return rows;
+    }
+    void perform_select_(std::vector<ColumnHandle> select_cols, const RowNumbers& rows, OutputFrame& outp) const {
+        table_.write(select_cols, rows, outp);
+    }
 public:
     TablePlayground(Table& table) : table_(table) {}
     void run(const Query& q, OutputFrame& outp) {
-        RowNumbers rows(table_.rows_count());
-        std::vector<std::vector<ColumnPredicate::ref>> preds(table_.columns_count());
-        for (i64 i = 0; i < isize(q.where_preds); i++) {
-            auto& pred = q.where_preds[i];
-            preds[pred->column().id()].push_back(*pred);
-        }
-        const auto first_fullscan_column_id = get_first_fullscan_column_id(table_.metadata().key_len(), preds);
-        lprintln("range scan for columns 0.." + std::to_string(first_fullscan_column_id - 1));
-        for (i64 column_id = 0; column_id < first_fullscan_column_id; column_id++)
-            for (const auto& pred : preds[column_id])
-                rows.narrow(pred.get().filter(rows.full_range())); // todo something's wrong with this line
-        
-        lprintln("full scan for remaining rows: " + repr(rows.full_range()));
-        {
-            std::vector<index_t> remaining;
-            for (const auto row_id : rows) {
-                bool remains = true;
-                for (i64 column_id = first_fullscan_column_id; column_id < isize(preds); column_id++)
-                    for (const auto& pred : preds[column_id])
-                        remains &= pred.get().match_row_id(row_id);
-                if (remains)
-                    remaining.push_back(row_id);
-            }
-            rows.set_indices_set(std::move(remaining));
-        }
-        table_.write(q.select_cols, rows, outp);
+        auto row_numbers = perform_where_(q.where_preds);
+        perform_select_(q.select_cols, row_numbers, outp);
     }
     void validate() const {
         const auto len = table_.metadata().key_len();
@@ -499,7 +526,7 @@ public:
 private:
     Table& table_;
 };
-// }}}
+
 // parse {{{
 Query parse(const Table& tbl, const std::string line) {
     Query q;
