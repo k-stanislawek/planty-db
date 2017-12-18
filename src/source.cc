@@ -81,13 +81,16 @@ private:
 
 // RowNumbers {{{
 class RowNumbersIterator {
+    friend class RowNumbers;
 public:
     RowNumbersIterator() = default;
     RowNumbersIterator(bool is_range, indices_t::const_iterator indices_it, RowRange range)
         : indices_it_(indices_it), range_(range), is_range_(is_range)
     {}
     bool operator==(const RowNumbersIterator& other) const {
-        return is_range_ ? (range_ == other.range_) : indices_it_ == other.indices_it_;
+        massert2(range_.r() == other.range_.r());
+//        return is_range_ ? range_.l() == other.range_.l() : indices_it_ == other.indices_it_;
+        return range_.l() == other.range_.l() && indices_it_ == other.indices_it_;
     }
     bool operator!=(const RowNumbersIterator& other) const {
         return !(*this == other);
@@ -105,9 +108,6 @@ public:
         else
             return *indices_it_;
     }
-    RowNumbersIterator make_end() const {
-        return RowNumbersIterator(is_range_, indices_it_, RowRange(range_.r() + 1, range_.r()));
-    }
 private:
     indices_t::const_iterator indices_it_;
     RowRange range_;
@@ -122,12 +122,14 @@ public:
         massert(!indices_set_used_, "for now, full_range() shouldn't be used with indices_set_used_");
         return range_;
     }
-
-    iterator begin() const {
-        return RowNumbersIterator(!indices_set_used_, indices_.cbegin(), range_);
-    }
-    iterator end() const {
-        return RowNumbersIterator(!indices_set_used_, indices_.cend(), RowRange(range_.r() + 1, range_.r()));
+    template <typename F>
+    void foreach(const F& f) const {
+        if (indices_set_used_)
+            for (const auto& row_id : indices_)
+                f(row_id);
+        else
+            for (i64 row_id = range_.l(); row_id <= range_.r(); row_id++)
+                f(row_id);
     }
     void narrow(RowRange narrower) {
         massert(!indices_set_used_, "indices_set_ used during narrowing");
@@ -325,11 +327,11 @@ void Table::write(const cnames& names, const RowNumbers& rows, OutputFrame& fram
     const auto columns_count = isize(columns);
     // TODO add this check to "query" class
     massert(columns_count > 0, "can't select 0 columns");
-    for (const auto row_num : rows) {
+    rows.foreach([&frame, &columns_ = columns_, columns_count, &columns](i64 row_num) {
         frame.new_row(columns_[columns[0]]->at(row_num));
         for (i64 i = 1; i < columns_count; i++)
             frame.add_to_row(columns_[columns[i]]->at(row_num));
-    }
+    });
 }
 // }}}
 
@@ -431,6 +433,9 @@ private:
     ConstBinding right_arg_;
 }; // }}}
 
+
+
+
 using preds_t = std::vector<ColumnPredicate::ptr>;
 using pred_groups_t = std::vector<std::vector<ColumnPredicate::ref>>;
 using columns_t = std::vector<ColumnHandle>;
@@ -485,14 +490,16 @@ class TablePlayground { // {{{
         if (!has_any_predicates(preds_begin, preds_end))
             return;
         std::vector<index_t> remaining;
-        for (const auto row_id : rows) {
+        const auto rng = rows.full_range();
+        rows.foreach([&preds_begin, &preds_end, &remaining](i64 row_id) {
+//        for (const auto row_id : rows) {
             bool remains = true;
             for (auto it = preds_begin; it != preds_end; it++)
                 for (const auto& pred : *it)
                     remains &= pred.get().match_row_id(row_id);
             if (remains)
                 remaining.push_back(row_id);
-        }
+        });
         rows.set_indices_set(std::move(remaining));
     }
     RowNumbers perform_where_(const preds_t& where_preds) {
@@ -523,7 +530,7 @@ public:
                 current_value.push_back(table_.column(j)->at(i));
             if (i != 0)
                 table_check(!vector_less(current_value, prev_value), 
-                    "row " + std::to_string(i) + "'s key is lesser than previous row ");
+                    "row " + std::to_string(i) + "'s key is lesser than previous row");
             prev_value = std::move(current_value);
         }
     }
