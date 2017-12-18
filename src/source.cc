@@ -79,7 +79,8 @@ private:
     cname name_;
 }; // }}}
 
-class RowNumbersIterator { // {{{
+// RowNumbers {{{
+class RowNumbersIterator {
 public:
     RowNumbersIterator() = default;
     RowNumbersIterator(bool is_range, indices_t::const_iterator indices_it, RowRange range)
@@ -237,48 +238,15 @@ private:
 };
 // }}}
 
+// table {{{
 class ColumnHandle;
-
 class Table {
 public:
     Table(Metadata metadata0, std::vector<IntColumn::ptr> columns0) : metadata_(std::move(metadata0)), columns_(std::move(columns0)) {}
 public:
-    // read/write {{{
-    static Table read(InputFrame& frame) {
-        auto metadata = frame.get_metadata();
-        const auto& header = metadata.columns();
-        std::vector<IntColumn::ptr> columns(metadata.columns().size());
-
-        columns.resize(metadata.columns().size());
-        for (i64 i = 0; i < isize(header); i++) {
-            columns[i] = IntColumn::make();
-            columns[i]->name() = header[i];
-        }
-        massert(!columns.empty(), "empty header");
-        auto column_it = columns.begin();
-        for (auto elem = *frame; !frame.end(); elem = *(++frame)) {
-            (*column_it)->push_back(elem);
-            if (++column_it == columns.end()) column_it = columns.begin();
-        }
-        table_check(column_it == columns.begin(), "couldn't read the same number of values for each column");
-        Table tbl(std::move(metadata), std::move(columns));
-        dprintln("rows:", tbl.rows_count(), "columns:", tbl.columns_count());
-        return tbl;
-    }
+    static Table read(InputFrame& frame);
     void write(const std::vector<ColumnHandle>& columns, const RowNumbers& rows, OutputFrame& frame);
-    void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
-        frame.add_header(names);
-        const auto columns = resolve_columns_(names);
-        const auto columns_count = isize(columns);
-        // TODO add this check to "query" class
-        massert(columns_count > 0, "can't select 0 columns");
-        for (const auto row_num : rows) {
-            frame.new_row(columns_[columns[0]]->at(row_num));
-            for (i64 i = 1; i < columns_count; i++)
-                frame.add_to_row(columns_[columns[i]]->at(row_num));
-        }
-    }
-    // }}}
+    void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame);
     const IntColumn::ptr& column(const cname& name) const {
         return columns_[resolve_column_(name)];
     }
@@ -306,6 +274,8 @@ private:
     Metadata metadata_;
     std::vector<IntColumn::ptr> columns_;
 };
+// }}}
+// column handle {{{
 class ColumnHandle {
 public:
     ColumnHandle(const Table& tbl, std::string name) :
@@ -319,6 +289,8 @@ private:
     index_t col_id_;
     const IntColumn::ref col_;
 };
+// }}}
+// read/write {{{
 void Table::write(const std::vector<ColumnHandle>& columns, const RowNumbers& rows, OutputFrame& frame) {
     // todo un-lazy it
     vstr names;
@@ -326,14 +298,47 @@ void Table::write(const std::vector<ColumnHandle>& columns, const RowNumbers& ro
         names.push_back(col.ref().name());
     write(names, rows, frame);
 }
+Table Table::read(InputFrame& frame) {
+    auto metadata = frame.get_metadata();
+    const auto& header = metadata.columns();
+    std::vector<IntColumn::ptr> columns(metadata.columns().size());
 
-// bindings {{{
+    columns.resize(metadata.columns().size());
+    for (i64 i = 0; i < isize(header); i++) {
+        columns[i] = IntColumn::make();
+        columns[i]->name() = header[i];
+    }
+    massert(!columns.empty(), "empty header");
+    auto column_it = columns.begin();
+    for (auto elem = *frame; !frame.end(); elem = *(++frame)) {
+        (*column_it)->push_back(elem);
+        if (++column_it == columns.end()) column_it = columns.begin();
+    }
+    table_check(column_it == columns.begin(), "couldn't read the same number of values for each column");
+    Table tbl(std::move(metadata), std::move(columns));
+    dprintln("rows:", tbl.rows_count(), "columns:", tbl.columns_count());
+    return tbl;
+}
+void Table::write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
+    frame.add_header(names);
+    const auto columns = resolve_columns_(names);
+    const auto columns_count = isize(columns);
+    // TODO add this check to "query" class
+    massert(columns_count > 0, "can't select 0 columns");
+    for (const auto row_num : rows) {
+        frame.new_row(columns_[columns[0]]->at(row_num));
+        for (i64 i = 1; i < columns_count; i++)
+            frame.add_to_row(columns_[columns[i]]->at(row_num));
+    }
+}
+// }}}
+
+// expression bindings {{{
 class ConstBinding {
 public:
     ConstBinding(value_t value0) : value_(value0) {}
 add_field_with_lvalue_ref_accessor(value_t, value)
 };
-
 class ColumnBinding {
 public:
     ColumnBinding(const IntColumn& col, const RowRange& rng) : col_(col), rng_(rng) {}
@@ -423,14 +428,12 @@ private:
     ConstBinding right_arg_;
 }; // }}}
 
-struct Query {
+struct Query { // {{{
     std::vector<ColumnPredicate::ptr> where_preds;
     std::vector<ColumnHandle> select_cols;
     auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_preds, select_cols); }
-};
-
+}; // }}}
 // table playground {{{
-
 index_t get_first_fullscan_column_id(index_t key_len, const std::vector<std::vector<ColumnPredicate::ref>>& preds) {
     for (i64 i = 0; i < key_len; i++) {
         bool can_be_range_filtered = true;
