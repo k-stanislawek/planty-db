@@ -1,6 +1,7 @@
 FLAGS_COMMON=-std=c++17 -Wall -Wextra -pedantic -Wshadow -Wfloat-equal -Winit-self
 FLAGS_DEBUG=$(FLAGS_COMMON) -O0 -g -DDEBUG_PRINTS -coverage -ftrapv -fsanitize=address
-FLAGS_RELEASE=$(FLAGS_COMMON) -O3
+FLAGS_RELEASE=$(FLAGS_COMMON) -O3 -DNDEBUG
+FLAGS_PROFILING=$(FLAGS_RELEASE) -g
 
 CC=g++-6
 
@@ -11,6 +12,9 @@ default: debug.e
 
 debug.e: $(deps)
 	$(CC) $< -o $@ ${FLAGS_DEBUG}
+
+profiling.e: $(deps)
+	$(CC) $< -o $@ ${FLAGS_PROFILING}
 
 clang.e: $(deps)
 	clang++-5.0 $< -o $@ ${FLAGS_DEBUG}
