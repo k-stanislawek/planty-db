@@ -431,13 +431,17 @@ private:
     ConstBinding right_arg_;
 }; // }}}
 
+using preds_t = std::vector<ColumnPredicate::ptr>;
+using pred_groups_t = std::vector<std::vector<ColumnPredicate::ref>>;
+using columns_t = std::vector<ColumnHandle>;
+
 struct Query { // {{{
-    std::vector<ColumnPredicate::ptr> where_preds;
-    std::vector<ColumnHandle> select_cols;
+    preds_t where_preds;
+    columns_t select_cols;
     auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_preds, select_cols); }
 }; // }}}
-class TablePlayground { // table playground {{{
-    static index_t get_first_fullscan_column_id_(index_t key_len, const std::vector<std::vector<ColumnPredicate::ref>>& preds) {
+class TablePlayground { // {{{
+    static index_t get_first_fullscan_column_id_(index_t key_len, const pred_groups_t& preds) {
         for (i64 i = 0; i < key_len; i++) {
             bool can_be_range_filtered = true;
             bool matches_single_element = false;
@@ -454,8 +458,8 @@ class TablePlayground { // table playground {{{
         }
         return key_len;
     }
-    static std::vector<std::vector<ColumnPredicate::ref>> group_preds_by_column_(const std::vector<ColumnPredicate::ptr>& where_preds, index_t columns_count) {
-        std::vector<std::vector<ColumnPredicate::ref>> preds(columns_count);
+    static pred_groups_t group_preds_by_column_(const preds_t& where_preds, index_t columns_count) {
+        pred_groups_t preds(columns_count);
         for (i64 i = 0; i < isize(where_preds); i++) {
             auto& pred = where_preds[i];
             massert2(pred->column().id() < isize(preds));
@@ -491,7 +495,7 @@ class TablePlayground { // table playground {{{
         }
         rows.set_indices_set(std::move(remaining));
     }
-    RowNumbers perform_where_(const std::vector<ColumnPredicate::ptr>& where_preds) {
+    RowNumbers perform_where_(const preds_t& where_preds) {
         RowNumbers rows(table_.rows_count());
         const auto preds = group_preds_by_column_(where_preds, table_.columns_count());
         const auto first_fullscan_column_id = get_first_fullscan_column_id_(table_.metadata().key_len(), preds);
@@ -501,7 +505,7 @@ class TablePlayground { // table playground {{{
         narrow_by_scan(rows, preds.begin() + first_fullscan_column_id, preds.end());
         return rows;
     }
-    void perform_select_(std::vector<ColumnHandle> select_cols, const RowNumbers& rows, OutputFrame& outp) const {
+    void perform_select_(const columns_t& select_cols, const RowNumbers& rows, OutputFrame& outp) const {
         table_.write(select_cols, rows, outp);
     }
 public:
