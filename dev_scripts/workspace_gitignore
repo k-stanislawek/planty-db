@@ -1,0 +1,7 @@
+*.cg.log
+*.csv
+*.err
+*.in
+*.out
+*.perf
+
