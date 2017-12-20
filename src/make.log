@@ -1,0 +1,1 @@
+g++-6 source.cc -o .debug.e -std=c++17 -Wall -Wextra -pedantic -Wshadow -Wfloat-equal -Winit-self -O0 -g -DDEBUG_PRINTS -coverage -ftrapv -fsanitize=address
