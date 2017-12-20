@@ -1,3 +1,7 @@
 2017-12-20 13:39:47 build(target=release.e)
 2017-12-20 13:39:47 cd ../src && make release.e
 2017-12-20 13:39:47     stdout: b"make: 'release.e' is up to date.\n"
+2017-12-20 13:40:30 build(target=release.e)
+2017-12-20 13:40:30 cd ../src && make release.e
+2017-12-20 13:40:30     stdout: make: 'release.e' is up to date.
+
