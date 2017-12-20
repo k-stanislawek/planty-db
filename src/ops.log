@@ -1,5 +1,3 @@
-2017-12-20 13:37:48 unknown command
-2017-12-20 13:37:51 unknown command
-2017-12-20 13:39:05 build(t,a,r,g,e,t,=,r,e,l,e,a,s,e,.,e)
-2017-12-20 13:39:05 cd ../src && make release.e
-2017-12-20 13:39:05     stdout: b"make: 'release.e' is up to date.\n"
+2017-12-20 13:39:47 build(target=release.e)
+2017-12-20 13:39:47 cd ../src && make release.e
+2017-12-20 13:39:47     stdout: b"make: 'release.e' is up to date.\n"
