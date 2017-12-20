@@ -1,20 +1,8 @@
 #include <bits/stdc++.h>
 #include "basic.h"
 #include "metaclass.h"
-
-using index_t = i64;
-using value_t = i64;
-using vstr = std::vector<std::string>;
-using indices_t = std::vector<index_t>;
-using vi64 = std::vector<i64>;
-using cname = std::string;
-using cnames = std::vector<std::string>;
-// note: some unique "column id" would be very useful, because we don't want Columns to have references to Table,
-// and still we want to differentiate columns with the same name
-// for now, we use cname for id's purposes
-
-
-#define lprintln(...) lprintln("log:", __VA_ARGS__); println("log:", __VA_ARGS__)
+#include "defs.h"
+#include "measure.h"
 
 // {{{ exceptions and checks definitions
 #define exception_check(ERROR_NAME, COND, MSG) do { if (!(COND)) throw ERROR_NAME(MSG); } while(0)
@@ -28,13 +16,6 @@ add_exception(table_error, data_error);
 add_exception(query_semantics_error, data_error);
 #define query_semantics_check(COND, MSG) exception_check(query_semantics_error, COND, MSG)
 #undef add_exception
-// }}}
-
-// {{{ particular asserts
-#define bound_assert(INDEX, CONTAINER) massert(INDEX >= 0 && INDEX < isize(CONTAINER), \
-        "Index '" #INDEX "' = " + std::to_string(INDEX) + " out of bounds of container '" #CONTAINER \
-        "' with size " + std::to_string(isize(CONTAINER)))
-#define unreachable_assert(msg) do { std::cerr << "Fatal error: unreachable code was reached in line " << __LINE__ << ", message: " << msg << std::endl; exit(42); } while(0)
 // }}}
 
 class RowRange { // {{{
@@ -78,45 +59,8 @@ private:
     std::vector<value_t> data_;
     cname name_;
 }; // }}}
-
-// RowNumbers {{{
-class RowNumbersIterator {
-    friend class RowNumbers;
-public:
-    RowNumbersIterator() = default;
-    RowNumbersIterator(bool is_range, indices_t::const_iterator indices_it, RowRange range)
-        : indices_it_(indices_it), range_(range), is_range_(is_range)
-    {}
-    bool operator==(const RowNumbersIterator& other) const {
-        massert2(range_.r() == other.range_.r());
-//        return is_range_ ? range_.l() == other.range_.l() : indices_it_ == other.indices_it_;
-        return range_.l() == other.range_.l() && indices_it_ == other.indices_it_;
-    }
-    bool operator!=(const RowNumbersIterator& other) const {
-        return !(*this == other);
-    }
-    RowNumbersIterator& operator++() {
-        if (is_range_)
-            ++range_.l();
-        else
-            ++indices_it_;
-        return *this;
-    }
-    index_t operator*() const {
-        if (is_range_)
-            return range_.l();
-        else
-            return *indices_it_;
-    }
-private:
-    indices_t::const_iterator indices_it_;
-    RowRange range_;
-    const bool is_range_;
-};
-
 class RowNumbers {
 public:
-    using iterator = RowNumbersIterator;
     RowNumbers(index_t len) : range_(0, len - 1), indices_set_used_(false) {}
     RowRange full_range() const {
         massert(!indices_set_used_, "for now, full_range() shouldn't be used with indices_set_used_");
@@ -433,18 +377,17 @@ private:
     ConstBinding right_arg_;
 }; // }}}
 
-
-
-
+// query {{{
 using preds_t = std::vector<ColumnPredicate::ptr>;
 using pred_groups_t = std::vector<std::vector<ColumnPredicate::ref>>;
 using columns_t = std::vector<ColumnHandle>;
 
-struct Query { // {{{
+struct Query {
     preds_t where_preds;
     columns_t select_cols;
     auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_preds, select_cols); }
 }; // }}}
+
 class TablePlayground { // {{{
     static index_t get_first_fullscan_column_id_(index_t key_len, const pred_groups_t& preds) {
         for (i64 i = 0; i < key_len; i++) {
@@ -490,9 +433,7 @@ class TablePlayground { // {{{
         if (!has_any_predicates(preds_begin, preds_end))
             return;
         std::vector<index_t> remaining;
-        const auto rng = rows.full_range();
         rows.foreach([&preds_begin, &preds_end, &remaining](i64 row_id) {
-//        for (const auto row_id : rows) {
             bool remains = true;
             for (auto it = preds_begin; it != preds_end; it++)
                 for (const auto& pred : *it)
@@ -506,9 +447,9 @@ class TablePlayground { // {{{
         RowNumbers rows(table_.rows_count());
         const auto preds = group_preds_by_column_(where_preds, table_.columns_count());
         const auto first_fullscan_column_id = get_first_fullscan_column_id_(table_.metadata().key_len(), preds);
-        lprintln("range scan for columns 0.." + std::to_string(first_fullscan_column_id - 1));
+        log_info("range scan for columns 0.." + std::to_string(first_fullscan_column_id - 1));
         narrow_by_range_(rows, preds.begin(), preds.begin() + first_fullscan_column_id);
-        lprintln("full scan for remaining rows: " + repr(rows.full_range()));
+        log_info("full scan for remaining rows: " + repr(rows.full_range()));
         narrow_by_scan(rows, preds.begin() + first_fullscan_column_id, preds.end());
         return rows;
     }
@@ -536,7 +477,7 @@ public:
     }
 private:
     Table& table_;
-};
+}; // }}}
 
 // parse {{{
 Query parse(const Table& tbl, const std::string line) {
@@ -614,13 +555,17 @@ void main_loop(const CmdArgs& args) {
     t.validate();
 #endif
     std::string line;
+    i64 count = 0;
     while (std::getline(std::cin, line)) {
         try {
             println();
             auto q = parse(tbl, line);
             println("query:", line);
-            OutputFrame outp(std::cout);
+            log_info("query:", line);
             dprintln(repr(q));
+            Measure mes(std::to_string(++count));
+            using namespace std::chrono_literals;
+            OutputFrame outp(std::cout);
             t.run(q, outp);
             dprintln();
         } catch (const data_error& e) {
@@ -632,7 +577,7 @@ void main_loop(const CmdArgs& args) {
 // }}}
 // cmdline {{{
 void quit(std::string msg) {
-    lprintln(msg, "- exiting");
+    log_info(msg, "- exiting");
     exit(13);
 }
 CmdArgs validate(int argc, char** argv) {
