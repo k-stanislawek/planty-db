@@ -141,7 +141,7 @@ if __name__ == "__main__":
         return p
     
     parser = _add("new")
-    parser.add_argument("-p", "--path", default=".")
+    parser.add_argument("path")
     parser = _add("copytest")
     parser.add_argument("-t", "--test-dir", required=True, help="directory with 0.in, 0.csv")
     parser = _add("gentest")

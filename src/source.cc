@@ -6,21 +6,23 @@
 
 // {{{ exceptions and checks definitions
 #define exception_check(ERROR_NAME, COND, MSG) do { if (!(COND)) throw ERROR_NAME(MSG); } while(0)
-#define add_exception(ERROR_NAME, PARENT) struct ERROR_NAME : public PARENT { ERROR_NAME(std::string error) : PARENT(error) {} }
+
+#define add_exception(ERROR_NAME, PARENT) struct ERROR_NAME : public PARENT { ERROR_NAME(string const& error) : PARENT(error) {} }
 
 add_exception(data_error, std::runtime_error);
+
 add_exception(query_format_error, data_error);
 #define query_format_check(COND, MSG) exception_check(query_format_error, COND, MSG)
+
 add_exception(table_error, data_error);
 #define table_check(COND, MSG) exception_check(table_error, COND, MSG)
+
 add_exception(query_semantics_error, data_error);
 #define query_semantics_check(COND, MSG) exception_check(query_semantics_error, COND, MSG)
+
 #undef add_exception
 // }}}
-
 class RowRange { // {{{
-friend class RowNumbers;
-friend class RowNumbersIterator;
 public:
     RowRange() = default;
     RowRange(index_t l0, index_t r0) : l_(l0), r_(r0) {}
@@ -31,25 +33,24 @@ public:
     index_t& l() { return l_; }
     index_t r() const { return r_; }
     index_t& r() { return r_; }
-    i64 len() const { return r_ - l_ + 1; }
+    index_t len() const { return r_ - l_ + 1; }
     void normalize() { l_ = std::min(l_, r_ + 1); }
     auto _repr() const { return make_repr("RowRange", {"l", "r"}, l_, r_); }
 private:
     index_t l_, r_;
 }; // }}}
-
 class IntColumn { // {{{
 public:
     using ref = std::reference_wrapper<const IntColumn>;
     using ptr = std::unique_ptr<IntColumn>;
+
     static ptr make() { return std::make_unique<IntColumn>(); }
+    
     void push_back(const value_t elem) { data_.push_back(elem); }
     cname& name() noexcept { return name_; }
     const cname& name() const noexcept { return name_; }
     const value_t& at(index_t index) const noexcept { bound_assert(index, data_); return data_[index]; }
     index_t rows_count() const noexcept { return isize(data_); }
-    // todo implement
-    RowRange equal_range(const RowRange& rng, value_t vall, value_t valr) const noexcept;
     RowRange equal_range(const RowRange& rng, value_t val) const noexcept {
         auto r = std::equal_range(data_.begin() + rng.l(), data_.begin() + rng.r() + 1, val);
         return RowRange(r.first - data_.begin(), r.second - data_.begin() - 1);
@@ -59,8 +60,10 @@ private:
     std::vector<value_t> data_;
     cname name_;
 }; // }}}
-class RowNumbers {
+class RowNumbers { // {{{
 public:
+    static RowNumbers from_indices(const vi64&);
+    static RowNumbers from_range(const RowRange&);
     RowNumbers(index_t len) : range_(0, len - 1), indices_set_used_(false) {}
     RowRange full_range() const {
         massert(!indices_set_used_, "for now, full_range() shouldn't be used with indices_set_used_");
@@ -85,12 +88,16 @@ public:
         indices_set_used_ = true;
         indices_ = indices;
     }
+    template <typename F>
+    static void foreach(std::vector<RowNumbers> const& rows, F const& f) {
+        for (auto const& r : rows)
+            r.foreach(f);
+    }
 private:
     indices_t indices_;
     RowRange range_;
     bool indices_set_used_;
 }; // }}}
-
 // metadata {{{
 class Metadata {
 public:
@@ -183,7 +190,6 @@ private:
     std::ostream& os_;
 };
 // }}}
-
 // table {{{
 class ColumnHandle;
 class Table {
@@ -191,8 +197,8 @@ public:
     Table(Metadata metadata0, std::vector<IntColumn::ptr> columns0) : metadata_(std::move(metadata0)), columns_(std::move(columns0)) {}
 public:
     static Table read(InputFrame& frame);
-    void write(const std::vector<ColumnHandle>& columns, const RowNumbers& rows, OutputFrame& frame);
-    void write(const cnames& names, const RowNumbers& rows, OutputFrame& frame);
+    void write(const std::vector<ColumnHandle>& columns, const std::vector<RowNumbers>& rows, OutputFrame& frame);
+    void write(const cnames& names, const std::vector<RowNumbers>& rows, OutputFrame& frame);
     const IntColumn::ptr& column(const cname& name) const {
         return columns_[resolve_column_(name)];
     }
@@ -237,7 +243,7 @@ private:
 };
 // }}}
 // read/write {{{
-void Table::write(const std::vector<ColumnHandle>& columns, const RowNumbers& rows, OutputFrame& frame) {
+void Table::write(const std::vector<ColumnHandle>& columns, const std::vector<RowNumbers>& rows, OutputFrame& frame) {
     // todo un-lazy it
     vstr names;
     for (const auto& col : columns)
@@ -265,20 +271,19 @@ Table Table::read(InputFrame& frame) {
     dprintln("rows:", tbl.rows_count(), "columns:", tbl.columns_count());
     return tbl;
 }
-void Table::write(const cnames& names, const RowNumbers& rows, OutputFrame& frame) {
+void Table::write(const cnames& names, const std::vector<RowNumbers>& rows, OutputFrame& frame) {
     frame.add_header(names);
     const auto columns = resolve_columns_(names);
     const auto columns_count = isize(columns);
     // TODO add this check to "query" class
     massert(columns_count > 0, "can't select 0 columns");
-    rows.foreach([&frame, &columns_ = columns_, columns_count, &columns](i64 row_num) {
+    RowNumbers::foreach(rows, [&frame, &columns_ = columns_, columns_count, &columns](i64 row_num) {
         frame.new_row(columns_[columns[0]]->at(row_num));
         for (i64 i = 1; i < columns_count; i++)
             frame.add_to_row(columns_[columns[i]]->at(row_num));
     });
 }
 // }}}
-
 // expression bindings {{{
 class ConstBinding {
 public:
@@ -303,44 +308,29 @@ private:
 class PredOp { // {{{
 public:
     enum Op : char {op_less = '<', op_equal = '=', op_more = '>'};
-    //todo: through the power of modern c++, let's change PredOp() and _repr() implementations,
-    // so that we don't need to enumerate them by hand - let's use static mapping instead
-    // ...alternatively, let's use BOOST_PREPROCESSOR to generate classes like this (my own create_class)
-    
     PredOp(const std::string& op) {
         if (op == "<") op_ = op_less;
         else if (op == "=") op_ = op_equal;
         else if (op == ">") op_ = op_more;
         else unreachable_assert("unknown operator string in PredOp constructor: " + op);
     }
-    bool is_single_elem() const { return op_ == op_equal; }
-    auto _str() const { return this->_repr(); }
-    std::string _repr() const {
-        if (op_ == op_less) return "<";
-        if (op_ == op_equal) return "=";
-        if (op_ == op_more) return ">";
-        unreachable_assert("unknown operator in PredOp: " + std::string(1, static_cast<char>(op_)));
-    }
-    RowRange filter(const ColumnBinding& left, const ConstBinding& right) const noexcept {
-        auto result_range = left.equal_range(right.value());
-        switch (op_) {
-            case op_equal: return result_range;
-            case op_less: return RowRange(left.row_range().l(), result_range.l() - 1ll);
-            case op_more: return RowRange(result_range.r() + 1ll, left.row_range().r());
-        }
-        unreachable_assert("unknown pred: " + repr(op_));
-    }
-    bool match(const ConstBinding& left, const ConstBinding& right) const noexcept {
-        switch (op_) {
-            case op_less: return left.value() < right.value();
-            case op_equal: return left.value() == right.value();
-            case op_more: return left.value() > right.value();
-        }
-        unreachable_assert("unknown pred: " + repr(op_));
-    }
+    bool is_single_elem() const;
+    template <typename ...Args> RowRange filter(Args const&...) const;
+    template <typename ...Args> bool match(Args const&...) const;
+    std::string _str() const { return _repr(); }
+    std::string _repr() const { return std::string(1, static_cast<char>(op_)); }
 private:
     Op op_;
 }; // }}}
+struct FullscanRequest {
+    RowRange rows;
+    i64 first_col;
+    bool needs_fullscan() const;
+};
+struct FilterResult {
+    std::vector<FullscanRequest> rows_for_fullscan;
+    std::vector<RowRange> rows_for_rangescan;
+};
 class ColumnPredicate { // {{{
 public:
     using ref = std::reference_wrapper<ColumnPredicate>;
@@ -353,11 +343,12 @@ public:
     }
     RowRange filter(const RowRange& rng) const noexcept {
         ColumnBinding left_arg(col_.ref(), rng);
-        return pred_.filter(left_arg, right_arg_);
+        return {pred_.filter(left_arg, right_arg_)};
     }
     void filter(RowNumbers& rows) const noexcept {
         rows.narrow(filter(rows.full_range()));
     }
+    void filter(std::vector<RowRange>& rows, FilterResult& res) const; // todo make it noexcept somehow
     bool match_value(const value_t& val) const noexcept {
         return pred_.match(val, right_arg_);
     }
@@ -376,7 +367,6 @@ private:
     const PredOp pred_;
     ConstBinding right_arg_;
 }; // }}}
-
 // query {{{
 using preds_t = std::vector<ColumnPredicate::ptr>;
 using pred_groups_t = std::vector<std::vector<ColumnPredicate::ref>>;
@@ -387,15 +377,13 @@ struct Query {
     columns_t select_cols;
     auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_preds, select_cols); }
 }; // }}}
-
 class TablePlayground { // {{{
     static index_t get_first_fullscan_column_id_(index_t key_len, const pred_groups_t& preds) {
         for (i64 i = 0; i < key_len; i++) {
             bool can_be_range_filtered = true;
             bool matches_single_element = false;
             for (const auto& pred : preds[i]) {
-                if (pred.get().pred().is_single_elem())
-                    matches_single_element = true;
+                matches_single_element = true;
                 if (!pred.get().can_be_range_filtered())
                     can_be_range_filtered = false;
             } 
@@ -412,6 +400,7 @@ class TablePlayground { // {{{
             auto& pred = where_preds[i];
             massert2(pred->column().id() < isize(preds));
             preds[pred->column().id()].push_back(*pred);
+            massert2(preds[pred->column().id()].size() == 1);
         }
         return preds;
     }
@@ -428,6 +417,7 @@ class TablePlayground { // {{{
                 return true;
         return false;
     }
+    static vi64 do_fullscan_(FullscanRequest const& rows, pred_groups_t const& preds);
     template <typename It>
     static void narrow_by_scan(RowNumbers& rows, const It preds_begin, const It preds_end) {
         if (!has_any_predicates(preds_begin, preds_end))
@@ -443,17 +433,53 @@ class TablePlayground { // {{{
         });
         rows.set_indices_set(std::move(remaining));
     }
-    RowNumbers perform_where_(const preds_t& where_preds) {
-        RowNumbers rows(table_.rows_count());
-        const auto preds = group_preds_by_column_(where_preds, table_.columns_count());
-        const auto first_fullscan_column_id = get_first_fullscan_column_id_(table_.metadata().key_len(), preds);
-        log_info("range scan for columns 0.." + std::to_string(first_fullscan_column_id - 1));
-        narrow_by_range_(rows, preds.begin(), preds.begin() + first_fullscan_column_id);
-        log_info("full scan for remaining rows: " + repr(rows.full_range()));
-        narrow_by_scan(rows, preds.begin() + first_fullscan_column_id, preds.end());
-        return rows;
+    void merge(std::vector<RowRange> & v1, std::vector<RowRange> & v2);
+    std::vector<FullscanRequest> perform_range_scan_(pred_groups_t const& preds) {
+        return {};
+        /**
+         *        std::vector<RowRange> rows;
+        rows.emplace_back(0, table_.rows_count() - 1);
+        FilterResult filtered;
+        for (i64 c = 0; c < isize(preds); c++) {
+            if (c == table_.metadata().key_len())
+                break;
+            if (preds[c].empty())
+                break; // te brejki nie przejda; trzeba pododawac na filtered.rows_for_fullscan pary (c, sth)
+            // dalbym tutaj funkcje pomocnicza, i druga funkcje pomocnicza; jedna niech se uzywa brejkow i
+            // zwraca 'c', ale druga niech uzupelni 'fullscan_request' i zwroci go poprawnie
+            // I NIECH GO POSORTUJE
+            massert2(preds[c].size() == 1);
+            if (!preds[c][0].get().can_be_range_filtered())
+                break;
+            preds[c][0].get().filter(rows, filtered);
+            std::swap(rows, filtered.rows_for_rangescan);
+            filtered.rows_for_rangescan.clear();
+        } */
     }
-    void perform_select_(const columns_t& select_cols, const RowNumbers& rows, OutputFrame& outp) const {
+    std::vector<RowNumbers> perform_where_(const preds_t& where_preds) {
+        const auto preds = group_preds_by_column_(where_preds, table_.columns_count());
+
+        const auto range_scan_ress = perform_range_scan_(preds);
+
+
+        std::vector<RowNumbers> res;
+
+        for (FullscanRequest const& range_scan_res : range_scan_ress) {
+            if (range_scan_res.needs_fullscan())
+                res.push_back(RowNumbers::from_indices(do_fullscan_(range_scan_res, preds)));
+            else
+                res.push_back(RowNumbers::from_range(range_scan_res.rows));
+        }
+        return res;
+
+        // tutaj trzeba wypisac fullscan_request, w sposob zczytywany maszynowo, jako informacje
+        // o planerze zapytan
+        // (btw, latwo zauwazyc, ze dalo sie to wyliczyc bez wykonywania faktycnzych operacji...)
+        // (moze tak to od razu zaimplementowac?
+        // to przypomina coroutyny, mozna sprobowac to zakodzic w pythonie i zobaczyc jak sie przenosi na cpp)
+        // (albo zostawic komentarz tylko...na razie)
+    }
+    void perform_select_(const columns_t& select_cols, const std::vector<RowNumbers>& rows, OutputFrame& outp) const {
         table_.write(select_cols, rows, outp);
     }
 public:
@@ -478,7 +504,6 @@ public:
 private:
     Table& table_;
 }; // }}}
-
 // parse {{{
 Query parse(const Table& tbl, const std::string line) {
     Query q;

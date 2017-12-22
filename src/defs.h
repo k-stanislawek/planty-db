@@ -9,6 +9,8 @@ using indices_t = std::vector<index_t>;
 using vi64 = std::vector<i64>;
 using cname = std::string;
 using cnames = std::vector<std::string>;
+using std::vector;
+using std::string;
 
 #define log_info(...) lprintln("info:", __VA_ARGS__)
 #define log_debug(...) dprintln("debug:", __VA_ARGS__)
