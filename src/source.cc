@@ -25,10 +25,10 @@ add_exception(query_semantics_error, data_error);
 class RowRange { // {{{
 public:
     RowRange() = default;
+    RowRange(RowRange const&) = default;
     RowRange(index_t l0, index_t r0) : l_(l0), r_(r0) {}
-    bool operator==(const RowRange& other) const {
-        return l_ == other.l_ && r_ == other.r_;
-    }
+    bool operator==(const RowRange& other) const { return l_ == other.l_ && r_ == other.r_; }
+    bool operator<(const RowRange& other) const { return l_ != other.l_ ? l_ < other.l_ : r_ < other.r_; }
     index_t l() const { return l_; }
     index_t& l() { return l_; }
     index_t r() const { return r_; }
@@ -60,14 +60,29 @@ private:
     std::vector<value_t> data_;
     cname name_;
 }; // }}}
-class RowNumbers { // {{{
+class RowNumbers; // {{{
+class RowNumbersEraser {
 public:
-    static RowNumbers from_indices(const vi64&);
-    static RowNumbers from_range(const RowRange&);
-    RowNumbers(index_t len) : range_(0, len - 1), indices_set_used_(false) {}
-    RowRange full_range() const {
-        massert(!indices_set_used_, "for now, full_range() shouldn't be used with indices_set_used_");
+    RowNumbersEraser(RowNumbers & rows) : rows_(rows) {}
+    ~RowNumbersEraser() noexcept;
+    void erase(index_t idx) { massert2(indices_.back() < idx); indices_.push_back(idx); }
+private:
+    RowNumbers & rows_;
+    indices_t indices_;
+};
+class RowNumbers {
+    friend class RowNumbersEraser;
+public:
+    RowNumbers(RowRange const& range) noexcept : range_(range) {}
+    RowRange as_range() const noexcept {
+        massert2(!indices_set_used_);
         return range_;
+    }
+    void narrow(RowRange narrower) noexcept {
+        massert(!indices_set_used_, "indices_set_ used during narrowing");
+        range_.l() = std::max(range_.l(), narrower.l());
+        range_.r() = std::min(range_.r(), narrower.r());
+        range_.normalize();
     }
     template <typename F>
     void foreach(const F& f) const {
@@ -78,26 +93,22 @@ public:
             for (i64 row_id = range_.l(); row_id <= range_.r(); row_id++)
                 f(row_id);
     }
-    void narrow(RowRange narrower) {
-        massert(!indices_set_used_, "indices_set_ used during narrowing");
-        range_.l() = std::max(range_.l(), narrower.l());
-        range_.r() = std::min(range_.r(), narrower.r());
-        range_.normalize();
-    }
-    void set_indices_set(indices_t&& indices) {
-        indices_set_used_ = true;
-        indices_ = indices;
-    }
     template <typename F>
     static void foreach(std::vector<RowNumbers> const& rows, F const& f) {
         for (auto const& r : rows)
             r.foreach(f);
     }
 private:
-    indices_t indices_;
     RowRange range_;
-    bool indices_set_used_;
-}; // }}}
+    indices_t indices_ = {};
+    bool indices_set_used_ = false;
+};
+RowNumbersEraser::~RowNumbersEraser() noexcept {
+    massert2(!rows_.indices_set_used_);
+    rows_.indices_set_used_ = true;
+    rows_.indices_ = std::move(indices_);
+}
+// }}}
 // metadata {{{
 class Metadata {
 public:
@@ -322,51 +333,53 @@ public:
 private:
     Op op_;
 }; // }}}
-struct FullscanRequest {
-    RowRange rows;
-    i64 first_col;
-    bool needs_fullscan() const;
-};
 struct FilterResult {
-    std::vector<FullscanRequest> rows_for_fullscan;
-    std::vector<RowRange> rows_for_rangescan;
+    vector<RowRange> single_value_ranges;
+    vector<RowRange> multiple_values_ranges;
 };
-class ColumnPredicate { // {{{
+
+class ValueInterval {
+    value_t l_, r_;
+    bool l_open_, r_open_, l_infinity_, r_infinity_;
 public:
-    using ref = std::reference_wrapper<ColumnPredicate>;
-    using ptr = std::unique_ptr<ColumnPredicate>;
-    template <typename ...Ts>
-    static ptr make(const Ts&... ts) { return std::make_unique<ColumnPredicate>(ts...); }
-    ColumnPredicate(const ColumnHandle& col0, PredOp pred0, value_t right_arg0)
-        : col_(col0), pred_(pred0), right_arg_(right_arg0) 
-    {
+    ValueInterval(value_t l0, value_t r0, bool l_open0, bool r_open0,
+            bool l_infinity0, bool r_infinity0) noexcept : l_(l0), r_(r0), l_open_(l_open0),
+        r_open_(r_open0), l_infinity_(l_infinity0), r_infinity_(r_infinity0) {}
+    value_t const& l() const noexcept { return l_; }
+    value_t const& r() const noexcept { return r_; }
+    bool l_open() const noexcept { return l_open_; }
+    bool r_open() const noexcept { return r_open_; }
+    bool l_infinity() const noexcept { return l_infinity_; }
+    bool r_infinity() const noexcept { return r_infinity_; }
+    auto _repr() const {
+        auto bracket1 = (l_open() ? '(' : '[');
+        auto bracket2 = (r_open() ? ')' : ']');
+        auto value1 = (l_infinity() ? std::string("") : repr(l_));
+        auto value2 = (r_infinity() ? std::string("") : repr(r_));
+        return bracket1 + value1 + ".." + value2 + bracket2;
     }
-    RowRange filter(const RowRange& rng) const noexcept {
-        ColumnBinding left_arg(col_.ref(), rng);
-        return {pred_.filter(left_arg, right_arg_)};
+    auto _str() const { return _repr(); }
+    static ValueInterval from_string(const char*) {
+        return ValueInterval(1, 3, false, false, false, false);
     }
-    void filter(RowNumbers& rows) const noexcept {
-        rows.narrow(filter(rows.full_range()));
-    }
-    void filter(std::vector<RowRange>& rows, FilterResult& res) const; // todo make it noexcept somehow
-    bool match_value(const value_t& val) const noexcept {
-        return pred_.match(val, right_arg_);
-    }
-    bool match_row_id(const index_t& idx) const noexcept {
-        return match_value(col_.ref().at(idx));
-    }
-    bool can_be_range_filtered() const noexcept {
-        return true; // can be false for e.g. LIKE predicate for std::string
-    }
-    const ColumnHandle& column() const { return col_; }
-    const PredOp& pred() const { return pred_; }
-    auto _repr() const { return make_repr("ColumnPredicate", {"column", "predicate", "right_arg"}, col_, pred_, right_arg_.value()); }
-    auto _str() const { return col_.ref().name() + str(pred_) + str(right_arg_.value()); }
-private:
+};
+class ColumnRangesPredicate {
     const ColumnHandle col_;
-    const PredOp pred_;
-    ConstBinding right_arg_;
-}; // }}}
+    std::vector<ValueInterval> intervals_;
+public:
+    using ref = std::reference_wrapper<ColumnRangesPredicate>;
+    using ptr = std::unique_ptr<ColumnRangesPredicate>;
+    ColumnRangesPredicate(ColumnHandle h, std::vector<ValueInterval> intervals)
+        : col_(h), intervals_(intervals) {}
+    template <typename ...Ts>
+    static ptr make(const Ts&... ts) { return std::make_unique<ColumnRangesPredicate>(ts...); }
+    void filter(std::vector<RowRange> const& rows, FilterResult& res) const;
+    bool match_row_id(const index_t& idx) const;
+    const ColumnHandle& column() const { return col_; }
+    auto _repr() const { return make_repr("ColumnRangesPredicate", {"column", "intervals"}, col_, intervals_); }
+};
+using ColumnPredicate = ColumnRangesPredicate;
+ // }}}
 // query {{{
 using preds_t = std::vector<ColumnPredicate::ptr>;
 using pred_groups_t = std::vector<std::vector<ColumnPredicate::ref>>;
@@ -378,22 +391,6 @@ struct Query {
     auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_preds, select_cols); }
 }; // }}}
 class TablePlayground { // {{{
-    static index_t get_first_fullscan_column_id_(index_t key_len, const pred_groups_t& preds) {
-        for (i64 i = 0; i < key_len; i++) {
-            bool can_be_range_filtered = true;
-            bool matches_single_element = false;
-            for (const auto& pred : preds[i]) {
-                matches_single_element = true;
-                if (!pred.get().can_be_range_filtered())
-                    can_be_range_filtered = false;
-            } 
-            if (!can_be_range_filtered)
-                return i;
-            if (!matches_single_element)
-                return i + 1;
-        }
-        return key_len;
-    }
     static pred_groups_t group_preds_by_column_(const preds_t& where_preds, index_t columns_count) {
         pred_groups_t preds(columns_count);
         for (i64 i = 0; i < isize(where_preds); i++) {
@@ -404,80 +401,92 @@ class TablePlayground { // {{{
         }
         return preds;
     }
-    template <typename It>
-    static void narrow_by_range_(RowNumbers& rows, const It preds_begin, const It preds_end) {
-        for (auto it = preds_begin; it != preds_end; it++)
-            for (const auto& pred : *it)
-                pred.get().filter(rows);
-    }
-    template <typename It>
-    static bool has_any_predicates(const It preds_begin, const It preds_end) {
-        for (auto it = preds_begin; it != preds_end; it++)
-            if (!it->empty())
-                return true;
-        return false;
-    }
-    static vi64 do_fullscan_(FullscanRequest const& rows, pred_groups_t const& preds);
-    template <typename It>
-    static void narrow_by_scan(RowNumbers& rows, const It preds_begin, const It preds_end) {
-        if (!has_any_predicates(preds_begin, preds_end))
-            return;
-        std::vector<index_t> remaining;
-        rows.foreach([&preds_begin, &preds_end, &remaining](i64 row_id) {
-            bool remains = true;
-            for (auto it = preds_begin; it != preds_end; it++)
-                for (const auto& pred : *it)
-                    remains &= pred.get().match_row_id(row_id);
-            if (remains)
-                remaining.push_back(row_id);
-        });
-        rows.set_indices_set(std::move(remaining));
-    }
     void merge(std::vector<RowRange> & v1, std::vector<RowRange> & v2);
-    std::vector<FullscanRequest> perform_range_scan_(pred_groups_t const& preds) {
-        return {};
-        /**
-         *        std::vector<RowRange> rows;
-        rows.emplace_back(0, table_.rows_count() - 1);
-        FilterResult filtered;
-        for (i64 c = 0; c < isize(preds); c++) {
-            if (c == table_.metadata().key_len())
-                break;
-            if (preds[c].empty())
-                break; // te brejki nie przejda; trzeba pododawac na filtered.rows_for_fullscan pary (c, sth)
-            // dalbym tutaj funkcje pomocnicza, i druga funkcje pomocnicza; jedna niech se uzywa brejkow i
-            // zwraca 'c', ale druga niech uzupelni 'fullscan_request' i zwroci go poprawnie
-            // I NIECH GO POSORTUJE
-            massert2(preds[c].size() == 1);
-            if (!preds[c][0].get().can_be_range_filtered())
-                break;
-            preds[c][0].get().filter(rows, filtered);
-            std::swap(rows, filtered.rows_for_rangescan);
-            filtered.rows_for_rangescan.clear();
-        } */
-    }
-    std::vector<RowNumbers> perform_where_(const preds_t& where_preds) {
-        const auto preds = group_preds_by_column_(where_preds, table_.columns_count());
+    /**
+     * prepare_plan_(predicates) -> plan
+     * plan = {column: col_plan}
+     * col_plan = []
+     * 
+     *
+     */
 
-        const auto range_scan_ress = perform_range_scan_(preds);
-
-
-        std::vector<RowNumbers> res;
-
-        for (FullscanRequest const& range_scan_res : range_scan_ress) {
-            if (range_scan_res.needs_fullscan())
-                res.push_back(RowNumbers::from_indices(do_fullscan_(range_scan_res, preds)));
-            else
-                res.push_back(RowNumbers::from_range(range_scan_res.rows));
+    struct BeforeValidation {
+        vector<std::pair<std::string, PredOp>> data;
+    };
+    // after info about key and column order was used
+    struct BeforeScan {
+        /*
+         * {column -> single_val_preds}
+         * {column -> many_val_preds}
+         * len = key_len
+         */
+        pred_groups_t & column_multirange_preds;
+    };
+    struct FullscanRequest {
+        FullscanRequest(RowRange const& range, i64 const& fcol) : rows(range), first_col(fcol) {}
+        bool operator<(const FullscanRequest& other) const { return rows < other.rows; }
+        RowRange rows;
+        i64 first_col;
+    };
+    struct AfterRangeScan {
+        // sorted by .rows
+        void finalize();
+        std::vector<FullscanRequest> fullscan_requests_;
+    };
+    struct AfterRangeScanBuilder {
+        std::vector<FullscanRequest> fullscan_requests;
+        AfterRangeScan build() noexcept {
+            std::sort(fullscan_requests.begin(), fullscan_requests.end());
+            return AfterRangeScan{std::move(fullscan_requests)};
+        }
+    };
+    struct AfterFullscan {
+        // sorted by .rows
+        std::vector<RowNumbers> rows;
+    };
+    AfterFullscan do_fullscan_(AfterRangeScan & fullscan_data, pred_groups_t const& preds) {
+        AfterFullscan res;
+        for (FullscanRequest & e : fullscan_data.fullscan_requests_) {
+            RowNumbers row_numbers(e.rows);
+            {
+                RowNumbersEraser eraser(row_numbers);
+                for (i64 i = e.rows.l(); i <= e.rows.r(); i++) {
+                    bool can_stay = true;
+                    for (i64 c = e.first_col; c < table_.columns_count(); c++)
+                        can_stay &= preds[c][0].get().match_row_id(i);
+                    if (!can_stay)
+                        eraser.erase(i);
+                }
+            }
+            res.rows.push_back(std::move(row_numbers));
         }
         return res;
-
-        // tutaj trzeba wypisac fullscan_request, w sposob zczytywany maszynowo, jako informacje
-        // o planerze zapytan
-        // (btw, latwo zauwazyc, ze dalo sie to wyliczyc bez wykonywania faktycnzych operacji...)
-        // (moze tak to od razu zaimplementowac?
-        // to przypomina coroutyny, mozna sprobowac to zakodzic w pythonie i zobaczyc jak sie przenosi na cpp)
-        // (albo zostawic komentarz tylko...na razie)
+    }
+    RowRange get_first_row_range() const { return RowRange(0, table_.rows_count() - 1); }
+    AfterRangeScan perform_range_scan_(BeforeScan & inp) {
+        AfterRangeScanBuilder outp;
+        std::vector<RowRange> rows_to_rangescan = {get_first_row_range()};
+        FilterResult res;
+        for (i64 c = 0; c < table_.metadata().key_len(); c++) {
+            auto& pred = inp.column_multirange_preds[c][0].get();
+            pred.filter(rows_to_rangescan, res);
+            // add lambdas here
+            // lambda for appending to outp.fullscan_requests
+            // lambda for appending to new_rows_to_rangescan
+            // and then we can remove FilterResult
+            for (auto const& rng : res.multiple_values_ranges)
+                outp.fullscan_requests.emplace_back(rng, c);
+            std::swap(rows_to_rangescan, res.single_value_ranges);
+            res.single_value_ranges.clear();
+        }
+        return outp.build();
+    }
+    std::vector<RowNumbers> perform_where_(const preds_t& where_preds) {
+        auto preds = group_preds_by_column_(where_preds, table_.columns_count());
+        BeforeScan before{preds};
+        AfterRangeScan after_range = perform_range_scan_(before);
+        auto after_fullscan = do_fullscan_(after_range, preds);
+        return after_fullscan.rows;
     }
     void perform_select_(const columns_t& select_cols, const std::vector<RowNumbers>& rows, OutputFrame& outp) const {
         table_.write(select_cols, rows, outp);
