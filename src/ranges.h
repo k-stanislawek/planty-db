@@ -20,8 +20,8 @@ public:
         : begin_(start, step), end_(((stop - start - 1) / step + 1) * step + start, step) {
         massert2(start == stop || (stop - start) * step > 0);
     }
-    iterator begin() { return begin_; }
-    iterator end() { return end_; }
+    iterator begin() const { return begin_; }
+    iterator end() const { return end_; }
 private:
     const iterator begin_;
     const iterator end_;

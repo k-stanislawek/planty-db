@@ -3,7 +3,7 @@ FLAGS_DEBUG=$(FLAGS_COMMON) -O0 -g -DDEBUG_PRINTS -coverage -ftrapv -fsanitize=a
 FLAGS_RELEASE=$(FLAGS_COMMON) -O3 -DNDEBUG
 FLAGS_PROFILING=$(FLAGS_RELEASE) -g
 
-CC=g++-6
+CC=g++-7
 
 headers=$(wildcard *.h*)
 deps = source.cc Makefile $(headers)

@@ -28,6 +28,9 @@ public:
     using iterator = IntIterator<index_t>;
     RowRange() = default;
     RowRange(RowRange const&) = default;
+    RowRange & operator=(RowRange const&) = default;
+    RowRange & operator=(RowRange &&) = default;
+    RowRange(RowRange &&) = default;
     RowRange(index_t l0, index_t r0) : l_(l0), r_(r0) {}
     bool operator==(const RowRange& other) const { return l_ == other.l_ && r_ == other.r_; }
     bool operator<(const RowRange& other) const { return l_ != other.l_ ? l_ < other.l_ : r_ < other.r_; }
@@ -102,6 +105,9 @@ public:
         for (auto const& r : rows)
             r.foreach(f);
     }
+    auto _repr() const { return make_repr("RowNumbers",
+            {"range", "indices", "indices_set_used"},
+            range_, indices_, indices_set_used_); }
 private:
     RowRange range_;
     indices_t indices_ = {};
@@ -117,12 +123,31 @@ RowNumbersEraser::~RowNumbersEraser() noexcept {
 class Metadata {
 public:
     Metadata(vstr&& columns0, i64 key_len0) : columns_(columns0), key_len_(key_len0) {
-        table_check(key_len_ <= isize(columns_), "key_len " + std::to_string(key_len_) + " exceeds header length " + std::to_string(isize(columns_)));
+        massert2(!columns_.empty());
+        table_check(key_len_ <= columns_count(),
+                "key_len " + to_str(key_len_) + " exceeds header length " + to_str(columns_count()));
     }
-    const auto& columns() const { return columns_; }
-    const auto& key_len() const { return key_len_; }
+    i64 columns_count() const { return isize(columns_); }
+    index_t column_id(const cname& name) const { return resolve_column_(name); }
+    indices_t column_ids(const cnames& names) const {
+        indices_t res;
+        for (auto const& name : names) 
+            res.push_back(resolve_column_(name));
+        return res;
+    }
+    auto const& column_name(i64 const& id) const { bound_assert(id, columns_); return columns_[id]; }
+    auto const& column_names() const { return columns_; }
+    IntRange columns() const { return IntRange(0, columns_count()); }
+    auto const& key_len() const { return key_len_; }
+    IntRange key_columns() const { return IntRange(0, key_len()); }
     auto _repr() const { return make_repr("Metadata", {"columns", "key_len"}, columns_, key_len_); }
 private:
+    index_t resolve_column_(cname const& name) const {
+        for (auto const i : key_columns())
+            if (columns_[i] == name)
+                return i;
+        throw table_error("unknown column name: " + name); 
+    }
     vstr columns_;
     i64 key_len_;
 };
@@ -209,48 +234,42 @@ private:
 class ColumnHandle;
 class Table {
 public:
-    Table(Metadata metadata0, std::vector<IntColumn::ptr> columns0) : metadata_(std::move(metadata0)), columns_(std::move(columns0)) {}
+    Table(Metadata metadata0, std::vector<IntColumn::ptr> columns0)
+            : md_(std::move(metadata0)), columns_(std::move(columns0)) {
+        massert2(md_.columns_count() == isize(columns_));
+    }
 public:
     static Table read(InputFrame& frame);
-    void write(const std::vector<ColumnHandle>& columns, const std::vector<RowNumbers>& rows, OutputFrame& frame);
-    void write(const cnames& names, const std::vector<RowNumbers>& rows, OutputFrame& frame);
+    void write(const vector<ColumnHandle>& columns, const std::vector<RowNumbers>& rows, OutputFrame& frame);
+    void write(const cnames& names, const vector<RowNumbers>& rows, OutputFrame& frame);
+
+    i64 rows_count() const { return columns_[0]->rows_count(); }
+    RowRange row_range() const { return RowRange(0, rows_count() - 1); }
     const IntColumn::ptr& column(const cname& name) const {
-        return columns_[resolve_column_(name)];
+        return columns_[md_.column_id(name)];
     }
     const IntColumn::ptr& column(const index_t& column_id) const {
-        massert(column_id < isize(columns_), "index out of bound: " + std::to_string(column_id));
+        bound_assert(column_id, columns_);
         return columns_[column_id];
     }
-    index_t column_id(const cname& name) const { return resolve_column_(name); }
-    i64 rows_count() const { return columns_[0]->rows_count(); }
-    IntRange key_columns() const { return IntRange(0, metadata_.key_len()); }
-    RowRange row_range() const { return RowRange(0, rows_count() - 1); }
-    i64 columns_count() const { return isize(columns_); }
-    const Metadata& metadata() const noexcept { return metadata_; }
+    const Metadata& metadata() const noexcept { return md_; }
+
+    index_t column_id(const cname& name) const { return md_.column_id(name); }
+    IntRange key_columns() const { return md_.key_columns(); }
+    i64 columns_count() const { return md_.columns_count(); }
+    IntRange columns() const { return md_.columns(); }
 private:
-    indices_t resolve_columns_(const cnames& names) const {
-        indices_t columns;
-        std::transform(names.begin(), names.end(), std::back_inserter(columns),
-                [this](const auto& name){ return this->resolve_column_(name); });
-        return columns;
-    }
-    index_t resolve_column_(const cname& name) const {
-        for (i64 i = 0; i < isize(columns_); i++)
-            if (columns_[i]->name() == name)
-                return i;
-        table_check(false, "unknown column name: " + name); 
-    }
-    Metadata metadata_;
+    Metadata md_;
     std::vector<IntColumn::ptr> columns_;
 };
 // }}}
 // column handle {{{
 class ColumnHandle {
 public:
-    ColumnHandle(const Table& tbl, std::string name) :
-        col_id_(tbl.column_id(name)), col_(*tbl.column(col_id_))
-    {
-    }
+    ColumnHandle(Table const& tbl, cname name) :
+        col_id_(tbl.column_id(name)), col_(*tbl.column(col_id_)) {}
+    ColumnHandle(Table const& tbl, i64 column_id) :
+        col_id_(column_id), col_(*tbl.column(col_id_)) {}
     const IntColumn& ref() const { return col_; }
     index_t id() const { return col_id_; }
     auto _repr() const { return make_repr("ColumnHandle", {"column"}, col_.get()); }
@@ -260,7 +279,7 @@ private:
 };
 // }}}
 // read/write {{{
-void Table::write(const std::vector<ColumnHandle>& columns, const std::vector<RowNumbers>& rows, OutputFrame& frame) {
+void Table::write(const vector<ColumnHandle>& columns, const vector<RowNumbers>& rows, OutputFrame& frame) {
     // todo un-lazy it
     vstr names;
     for (const auto& col : columns)
@@ -268,35 +287,32 @@ void Table::write(const std::vector<ColumnHandle>& columns, const std::vector<Ro
     write(names, rows, frame);
 }
 Table Table::read(InputFrame& frame) {
-    auto metadata = frame.get_metadata();
-    const auto& header = metadata.columns();
-    std::vector<IntColumn::ptr> columns(metadata.columns().size());
-
-    columns.resize(metadata.columns().size());
-    for (i64 i = 0; i < isize(header); i++) {
+    auto md = frame.get_metadata();
+    std::vector<IntColumn::ptr> columns(md.columns_count());
+    for (auto const i : md.columns()) {
         columns[i] = IntColumn::make();
-        columns[i]->name() = header[i];
+        columns[i]->name() = md.column_name(i);
     }
-    massert(!columns.empty(), "empty header");
     auto column_it = columns.begin();
     for (auto elem = *frame; !frame.end(); elem = *(++frame)) {
         (*column_it)->push_back(elem);
         if (++column_it == columns.end()) column_it = columns.begin();
     }
     table_check(column_it == columns.begin(), "couldn't read the same number of values for each column");
-    Table tbl(std::move(metadata), std::move(columns));
+    Table tbl(std::move(md), std::move(columns));
     dprintln("rows:", tbl.rows_count(), "columns:", tbl.columns_count());
     return tbl;
 }
 void Table::write(const cnames& names, const std::vector<RowNumbers>& rows, OutputFrame& frame) {
     frame.add_header(names);
-    const auto columns = resolve_columns_(names);
-    const auto columns_count = isize(columns);
-    // TODO add this check to "query" class
+    auto const columns = md_.column_ids(names);
+    auto const columns_count = isize(columns);
     massert(columns_count > 0, "can't select 0 columns");
-    RowNumbers::foreach(rows, [&frame, &columns_ = columns_, columns_count, &columns](i64 row_num) {
+    RowNumbers::foreach(rows,
+            [&frame, &columns_ = columns_, columns_count, &columns]
+            (i64 row_num) {
         frame.new_row(columns_[columns[0]]->at(row_num));
-        for (i64 i = 1; i < columns_count; i++)
+        for (auto const i : IntRange(1, columns_count))
             frame.add_to_row(columns_[columns[i]]->at(row_num));
     });
 }
@@ -339,13 +355,12 @@ public:
 private:
     Op op_;
 }; // }}}
-class ValueInterval {
-    value_t l_, r_;
-    bool l_open_, r_open_, l_infinity_, r_infinity_;
+class ValueInterval { // {{{
 public:
+    ValueInterval(std::string_view strv) : ValueInterval(1, 3, 0, 0, 0, 0) {}
     ValueInterval(value_t l0, value_t r0, bool l_open0, bool r_open0,
-            bool l_infinity0, bool r_infinity0) noexcept : l_(l0), r_(r0), l_open_(l_open0),
-        r_open_(r_open0), l_infinity_(l_infinity0), r_infinity_(r_infinity0) {}
+        bool l_infinity0, bool r_infinity0) noexcept : l_(l0), r_(r0), l_open_(l_open0),
+            r_open_(r_open0), l_infinity_(l_infinity0), r_infinity_(r_infinity0) {}
     value_t const& l() const noexcept { return l_; }
     value_t const& r() const noexcept { return r_; }
     bool l_open() const noexcept { return l_open_; }
@@ -360,113 +375,74 @@ public:
         return bracket1 + value1 + ".." + value2 + bracket2;
     }
     auto _str() const { return _repr(); }
-    static ValueInterval from_string(const char*) {
-        return ValueInterval(1, 3, false, false, false, false);
-    }
-};
-class ColumnPredicate {
+private:
+    value_t l_, r_;
+    bool l_open_, r_open_, l_infinity_, r_infinity_;
+}; // }}}
+class ColumnPredicate { // {{{
 public:
-    using ref = std::reference_wrapper<ColumnPredicate>;
-    using ptr = std::unique_ptr<ColumnPredicate>;
     ColumnPredicate(ColumnHandle h, vector<ValueInterval> intervals)
         : col_(h), intervals_(intervals) {}
-    template <typename ...Ts>
-    static ptr make(const Ts&... ts) { return std::make_unique<ColumnPredicate>(ts...); }
     template <class AddSingleValueRange, class AddMultipleValuesRange>
     void filter(std::vector<RowRange> const& rows, AddSingleValueRange const& add_single, AddMultipleValuesRange const& add_multiple) const {
 
     }
     bool match_row_id(const index_t& idx) const;
-    const ColumnHandle& column() const { return col_; }
+//    const ColumnHandle& column() const { return col_; }
     auto _repr() const { return make_repr("ColumnPredicate", {"column", "intervals"}, col_, intervals_); }
 private:
     const ColumnHandle col_;
     vector<ValueInterval> intervals_;
-};
- // }}}
+}; // }}}
 // query {{{
-using preds_t = std::vector<ColumnPredicate::ptr>;
-using pred_groups_t = std::vector<std::vector<ColumnPredicate::ref>>;
 using columns_t = std::vector<ColumnHandle>;
 
-struct Query {
-    preds_t where_preds;
-    columns_t select_cols;
-    auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_preds, select_cols); }
-}; // }}}
-class TablePlayground { // {{{
-    static pred_groups_t group_preds_by_column_(const preds_t& where_preds, index_t columns_count) {
-        pred_groups_t preds(columns_count);
-        for (i64 i = 0; i < isize(where_preds); i++) {
-            auto& pred = where_preds[i];
-            massert2(pred->column().id() < isize(preds));
-            preds[pred->column().id()].push_back(*pred);
-            massert2(preds[pred->column().id()].size() == 1);
-        }
-        return preds;
+// after info about key and column order was used
+struct FullscanRequest {
+    FullscanRequest(RowRange range, i64 fcol) : rows(range), last_range_col(fcol) {}
+    FullscanRequest(FullscanRequest const&) = default;
+    FullscanRequest & operator=(FullscanRequest && other)  = default;
+    bool operator<(const FullscanRequest& other) const { return rows < other.rows; }
+    RowRange rows;
+    i64 last_range_col;
+    auto _repr() const { return make_repr("FullscanRequest", {"rows", "last_range_col"}, rows, last_range_col); }
+};
+class AfterRangeScan {
+public:
+    AfterRangeScan(std::vector<FullscanRequest> fullscan_requests_0) noexcept
+            : fullscan_requests_(std::move(fullscan_requests_0)) {
+        std::sort(fullscan_requests_.begin(), fullscan_requests_.end());
     }
-    struct BeforeValidation {
-        vector<std::pair<std::string, PredOp>> data;
-    };
-    // after info about key and column order was used
-    struct BeforeScan {
-        /*
-         * {column -> single_val_preds}
-         * {column -> many_val_preds}
-         * len = key_len
-         */
-        pred_groups_t & column_multirange_preds;
-    };
-    struct FullscanRequest {
-        FullscanRequest(RowRange && range, i64 fcol) : rows(range), last_range_col(fcol) {}
-        bool operator<(const FullscanRequest& other) const { return rows < other.rows; }
-        RowRange rows;
-        i64 last_range_col;
-    };
-    class AfterRangeScan {
-    public:
-        AfterRangeScan(std::vector<FullscanRequest> && fullscan_requests_0) noexcept
-                : fullscan_requests_(fullscan_requests_0) {
-            std::sort(fullscan_requests_.begin(), fullscan_requests_.end());
-        }
-        std::vector<FullscanRequest> const& fullscan_requests() const noexcept { return fullscan_requests_; }
-        auto _repr() const {
-            return make_repr("AfterRangeScan", {"fullscan_requests"}, fullscan_requests_);
-        }
-        auto _str() const { return _repr(); }
-    private:
-        std::vector<FullscanRequest> fullscan_requests_;
-    };
-    struct AfterFullscan {
-        // sorted by .rows
-        std::vector<RowNumbers> rows;
-    };
-    AfterFullscan do_fullscan_(AfterRangeScan & fullscan_data, pred_groups_t const& preds) {
-        std::vector<RowNumbers> outp;
-        for (FullscanRequest const& e : fullscan_data.fullscan_requests()) {
-            RowNumbers row_numbers(e.rows);
-            {
-                RowNumbersEraser eraser(row_numbers);
-                for (auto const i : e.rows) {
-                    bool can_stay = true;
-                    for (auto const c : IntRange(e.last_range_col + 1, table_.columns_count()))
-                        can_stay &= preds[c][0].get().match_row_id(i);
-                    if (!can_stay)
-                        eraser.erase(i);
-                }
-            }
-            outp.push_back(std::move(row_numbers));
-        }
-        return AfterFullscan{outp};
+    vector<FullscanRequest> const& fullscan_requests() const noexcept { return fullscan_requests_; }
+    auto _repr() const {
+        return make_repr("AfterRangeScan", {"fullscan_requests"}, fullscan_requests_);
     }
-    AfterRangeScan perform_range_scan_(BeforeScan & inp) {
+    auto _str() const { return _repr(); }
+private:
+    vector<FullscanRequest> fullscan_requests_;
+};
+class AfterFullscan {
+public:
+    AfterFullscan(vector<RowNumbers> rows_0) noexcept : rows_(std::move(rows_0)) {}
+    vector<RowNumbers> const& rows() const noexcept { return rows_; }
+    auto _repr() const { return make_repr("AfterFullscan", {"rows"}, rows_); }
+    auto _str() const { return _repr(); }
+private:
+    vector<RowNumbers> rows_;
+};
+// }}}
+// {{{ table predicate
+class TablePredicate {
+public:
+    TablePredicate(Metadata const& md, vector<ColumnPredicate> && preds_0) : md_(md), preds_(preds_0) {}
+    AfterRangeScan perform_range_scan(RowRange const& rows) const {
         vector<FullscanRequest> outp;
-        vector<RowRange> rows_to_rangescan = {table_.row_range()};
-        vector<RowRange> rows_to_rangescan_rotate;
-        for (const i64 c : table_.key_columns()) {
-            auto& pred = inp.column_multirange_preds[c][0].get();
+        vector<RowRange> rows_to_rangescan = {rows};
+        vector<RowRange> rows_to_rangescan_rotate = {};
+        for (const i64 c : md_.key_columns()) {
+            auto& pred = preds_[c];
             pred.filter(rows_to_rangescan,
-                    [& rows = rows_to_rangescan_rotate] (RowRange&& r) {
+                    [& rows = rows_to_rangescan_rotate] (RowRange && r) {
                         rows.push_back(r);
                     },
                     [& rows = outp, & c] (RowRange && r) {
@@ -478,56 +454,118 @@ class TablePlayground { // {{{
         }
         return AfterRangeScan(std::move(outp));
     }
-    std::vector<RowNumbers> perform_where_(const preds_t& where_preds) {
-        auto preds = group_preds_by_column_(where_preds, table_.columns_count());
-        BeforeScan before{preds};
-        AfterRangeScan after_range = perform_range_scan_(before);
-        auto after_fullscan = do_fullscan_(after_range, preds);
-        return after_fullscan.rows;
+    RowNumbers perform_full_scan(RowRange const& rows, IntRange const& columns) const {
+        RowNumbers row_numbers(rows);
+        {
+            RowNumbersEraser eraser(row_numbers);
+            for (auto const i : rows) {
+                bool can_stay = true;
+                for (auto const c : columns)
+                    can_stay &= preds_[c].match_row_id(i);
+                if (!can_stay)
+                    eraser.erase(i);
+            }
+        }
+        return row_numbers;
     }
-    void perform_select_(const columns_t& select_cols, const std::vector<RowNumbers>& rows, OutputFrame& outp) const {
-        table_.write(select_cols, rows, outp);
+    vector<RowNumbers> perform_full_scan(vector<FullscanRequest> const& requests) const {
+        std::vector<RowNumbers> outp;
+        for (auto const& request : requests)
+            outp.push_back(perform_full_scan(request.rows,
+                        IntRange(request.last_range_col + 1, md_.key_len())));
+        return outp;
     }
+    auto _repr() const { return make_repr("TablePredicate", {"preds"}, preds_); }
+private:
+    Metadata const& md_;
+    vector<ColumnPredicate> preds_;
+};
+struct Query {
+    TablePredicate where_pred;
+    columns_t select_cols;
+    auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_pred, select_cols); }
+};
+// }}}
+class TablePlayground { // {{{
 public:
-    TablePlayground(Table& table) : table_(table) {}
-    void run(const Query& q, OutputFrame& outp) {
-        auto row_numbers = perform_where_(q.where_preds);
-        perform_select_(q.select_cols, row_numbers, outp);
+    TablePlayground(Table & table) : table_(table) {}
+    void run(Query const& q, OutputFrame & outp) {
+        auto const after_range = q.where_pred.perform_range_scan(table_.row_range());
+        auto rows = q.where_pred.perform_full_scan(after_range.fullscan_requests());
+        table_.write(q.select_cols, rows, outp);
     }
     void validate() const {
-        const auto len = table_.metadata().key_len();
         vi64 prev_value;
-        for (i64 i = 0; i < table_.rows_count(); i++) {
+        for (auto const i : table_.row_range()) {
             vi64 current_value;
-            for (i64 j = 0; j < len; j++)
+            for (auto const j : table_.key_columns())
                 current_value.push_back(table_.column(j)->at(i));
-            if (i != 0)
-                table_check(!vector_less(current_value, prev_value), 
-                    "row " + std::to_string(i) + "'s key is lesser than previous row");
+            table_check(i == 0 || !vector_less(current_value, prev_value), 
+                "row " + std::to_string(i) + "'s key is lesser than previous row");
             prev_value = std::move(current_value);
         }
     }
 private:
     Table& table_;
 }; // }}}
-
-class TableRangePredicateBuilder {
+class SingleRangePred { // {{{
 public:
-
-
-    vector<ColumnPredicate>;
-
+    template <class T1, class T2>
+    SingleRangePred(T1 && op_0, T2 && value_0) : op_(op_0), value_(std::string_view(value_0)) {}
+    PredOp const& op() const noexcept { return op_; }
+    ValueInterval const& value() const noexcept { return value_; }
+    auto _repr() const {
+        return make_repr("SingleRangePred", {"op", "value"}, op_, value_);
+    }
+    auto _str() const { return _repr(); }
+private:
+    PredOp op_;
+    ValueInterval value_;
 };
-
+class RangePredBuilder {
+public:
+    RangePredBuilder(Metadata const& md_0, i64 column_id_0) : md_(md_0), column_id_(column_id_0) {}
+    template <class ...Ts>
+    void add_pred(Ts && ...ts) { single_preds_.emplace_back(ts...); }
+    ColumnPredicate build(Table const& tbl) {
+        return ColumnPredicate(ColumnHandle(tbl, column_id_), organize(single_preds_));
+    }
+    static vector<ValueInterval> organize(vector<SingleRangePred> single_preds);
+private:
+    Metadata const& md_;
+    const i64 column_id_;
+    vector<SingleRangePred> single_preds_;
+};
+class TablePredicateBuilder {
+public:
+    TablePredicateBuilder(const Metadata& md) : md_(md) {
+        for (auto const i : md_.columns())
+            preds_.emplace_back(md, i);
+    }
+    template <class ...Ts>
+    void add_pred(cname const& col, Ts && ...ts) {
+        preds_[md_.column_id(col)].add_pred(ts...);
+    }
+    TablePredicate build(Table const& tbl) {
+        vector<ColumnPredicate> preds;
+        for (auto pred : preds_)
+            preds.push_back(pred.build(tbl));
+        return TablePredicate(md_, std::move(preds));
+    }
+private:
+    const Metadata& md_;
+    vector<RangePredBuilder> preds_;
+}; // }}}
 // parse {{{
 Query parse(const Table& tbl, const std::string line) {
-    Query q;
+    TablePredicateBuilder where_builder(tbl.metadata());
+    columns_t select_builder;
+    // todo: select_builder: use metadata instead of table
     std::stringstream ss(line);
     std::string token;
     query_format_check(!ss.eof(), "empty line");
     ss >> token;
     query_format_check(token == "select", "no select at the beginning");
-    dprint("<select>");
     {
         bool no_comma = true;
         while (no_comma && !ss.eof()) {
@@ -536,45 +574,42 @@ Query parse(const Table& tbl, const std::string line) {
                 no_comma = false;
             else
                 token.pop_back();
-            dprint(" [" + token + "]");
-            q.select_cols.emplace_back(tbl, token);
+            select_builder.emplace_back(tbl, token);
         }
-        query_format_check(!q.select_cols.empty(), "select list empty");
+        query_format_check(!select_builder.empty(), "select list empty");
         query_format_check(!no_comma, "no comma after select list");
     }
     if (ss.eof()) {
-        dprintln(';');
-        return q;
+        return Query{where_builder.build(tbl), std::move(select_builder)};
     }
     ss >> token;
     query_format_check(token == "where", "something else than 'where' after select list: " + token);
-    dprint(" <where>");
     {
+        bool where_non_empty = false;
         bool no_comma = true;
         while (no_comma && !ss.eof()) {
+            where_non_empty = true;
             ss >> token;
             if (token.back() != ',')
                 no_comma = false;
             else
                 token.pop_back();
 
-            const auto sep = token.find_first_of("=<>");
-            query_format_check(sep != std::string::npos, "<>= not found");
-            const auto sep_val = PredOp(std::string(1, token[sep]));
-            const auto col = token.substr(0, sep);
-            const auto val = token.substr(sep + 1, isize(token) - sep - 1);
-            q.where_preds.push_back(ColumnPredicate::make(ColumnHandle(tbl, col), sep_val, stoll(val)));
-            dprint(" " + str(*q.where_preds.back()));
+            const auto sep_pos = token.find_first_of("=<>");
+            query_format_check(sep_pos != std::string::npos, "<>= not found");
+            const auto col = token.substr(0, sep_pos);
+            const auto sep = PredOp(std::string(1, token[sep_pos]));
+            const auto val = token.substr(sep_pos + 1, isize(token) - sep_pos - 1);
+            where_builder.add_pred(col, sep, val);
         }
-        query_format_check(!q.where_preds.empty(), "where list empty");
+        query_format_check(where_non_empty, "where list empty");
         query_format_check(!no_comma, "no comma after where list");
     }
     if (ss.eof()) {
-        dprintln(";");
-        return q;
+        return Query{where_builder.build(tbl), std::move(select_builder)};
     }
     ss >> token;
-    query_format_check(false, "there's something after 'where': " + token);
+    throw query_format_error("there's something after 'where': " + token);
 }
 // parse }}}
 // main loop {{{
