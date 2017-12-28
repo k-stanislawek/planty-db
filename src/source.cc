@@ -46,6 +46,70 @@ public:
 private:
     index_t l_, r_;
 }; // }}}
+std::string_view interval_separator = "..";
+
+i64 string_to_int(std::string_view strv) {
+    std::size_t first_non_converted = -1;
+    i64 const res = std::stoll(std::string(strv), &first_non_converted);
+    massert2(first_non_converted != std::size_t(-1));
+    query_format_check(first_non_converted == strv.size(),
+            "Error during converting to integer: " + string(strv));
+    return res; 
+}
+
+class ValueInterval { // {{{
+public:
+    ValueInterval(std::string_view strv) {
+        auto const sep_pos = strv.find(interval_separator);
+        l_ = (r_ = 0);
+        if (sep_pos == std::string_view::npos) {
+            auto const val = string_to_int(strv);
+            l_ = val;
+            r_ = val;
+            return;
+        }
+        // e.g. [1..2), (1..4], (..3), (..), [2..)
+        query_format_check(sep_pos > 0 && sep_pos + 2 < strv.size(), "bad '..' position: " + string(strv));
+        l_open_ = strv.front() == '(';
+        r_open_ = strv.back() == ')';
+        query_format_check(l_open_ || strv.front() == '[', "bad range open: " + string(strv));
+        query_format_check(r_open_ || strv.back() == ']', "bad range close: " + string(strv));
+        l_infinity_ = (sep_pos == 1);
+        r_infinity_ = (sep_pos + 2 == strv.size() - 1);
+        if (!l_infinity_)
+            l_ = string_to_int(strv.substr(1, sep_pos - 1));
+        if (!r_infinity_)
+            r_ = string_to_int(strv.substr(sep_pos + 2, strv.size() - 1 - (sep_pos + 2)));
+    }
+    ValueInterval(value_t l0, value_t r0, bool l_open0 = false, bool r_open0 = false,
+        bool l_infinity0 = false, bool r_infinity0 = false) noexcept : l_(l0), r_(r0), l_open_(l_open0),
+            r_open_(r_open0), l_infinity_(l_infinity0), r_infinity_(r_infinity0) {}
+    value_t const& l() const noexcept { return l_; }
+    value_t const& r() const noexcept { return r_; }
+    bool l_open() const noexcept { return l_open_; }
+    bool r_open() const noexcept { return r_open_; }
+    bool l_infinity() const noexcept { return l_infinity_; }
+    bool r_infinity() const noexcept { return r_infinity_; }
+    bool is_single_value() const noexcept {
+        return !l_infinity_ && !r_infinity_ && !l_open_ && !r_open_ && l_ == r_;
+    }
+    bool contains(value_t const& v) const noexcept {
+        bool const l_contains = l_infinity_ || (l_open_ ? (l_ < v) : (l_ <= v));
+        bool const r_contains = r_infinity_ || (r_open_ ? (r_ > v) : (r_ >= v));
+        return l_contains && r_contains;
+    }
+    auto _repr() const {
+        auto bracket1 = (l_open() ? '(' : '[');
+        auto bracket2 = (r_open() ? ')' : ']');
+        auto value1 = (l_infinity() ? std::string("") : repr(l_));
+        auto value2 = (r_infinity() ? std::string("") : repr(r_));
+        return bracket1 + value1 + ".." + value2 + bracket2;
+    }
+    auto _str() const { return _repr(); }
+private:
+    value_t l_, r_;
+    bool l_open_, r_open_, l_infinity_, r_infinity_;
+}; // }}}
 class IntColumn { // {{{
 public:
     using ref = std::reference_wrapper<const IntColumn>;
@@ -62,6 +126,7 @@ public:
         auto r = std::equal_range(data_.begin() + rng.l(), data_.begin() + rng.r() + 1, val);
         return RowRange(r.first - data_.begin(), r.second - data_.begin() - 1);
     }
+    RowRange equal_range(const RowRange& rng, ValueInterval const& val) const noexcept;
     auto _repr() const { return make_repr("IntColumn", {"name", "length"}, name_, isize(data_)); }
 private:
     std::vector<value_t> data_;
@@ -355,40 +420,35 @@ public:
 private:
     Op op_;
 }; // }}}
-class ValueInterval { // {{{
-public:
-    ValueInterval(std::string_view strv) : ValueInterval(1, 3, 0, 0, 0, 0) {}
-    ValueInterval(value_t l0, value_t r0, bool l_open0, bool r_open0,
-        bool l_infinity0, bool r_infinity0) noexcept : l_(l0), r_(r0), l_open_(l_open0),
-            r_open_(r_open0), l_infinity_(l_infinity0), r_infinity_(r_infinity0) {}
-    value_t const& l() const noexcept { return l_; }
-    value_t const& r() const noexcept { return r_; }
-    bool l_open() const noexcept { return l_open_; }
-    bool r_open() const noexcept { return r_open_; }
-    bool l_infinity() const noexcept { return l_infinity_; }
-    bool r_infinity() const noexcept { return r_infinity_; }
-    auto _repr() const {
-        auto bracket1 = (l_open() ? '(' : '[');
-        auto bracket2 = (r_open() ? ')' : ']');
-        auto value1 = (l_infinity() ? std::string("") : repr(l_));
-        auto value2 = (r_infinity() ? std::string("") : repr(r_));
-        return bracket1 + value1 + ".." + value2 + bracket2;
-    }
-    auto _str() const { return _repr(); }
-private:
-    value_t l_, r_;
-    bool l_open_, r_open_, l_infinity_, r_infinity_;
-}; // }}}
 class ColumnPredicate { // {{{
 public:
     ColumnPredicate(ColumnHandle h, vector<ValueInterval> intervals)
         : col_(h), intervals_(intervals) {}
     template <class AddSingleValueRange, class AddMultipleValuesRange>
     void filter(std::vector<RowRange> const& rows, AddSingleValueRange const& add_single, AddMultipleValuesRange const& add_multiple) const {
-
+        for (RowRange const& range : rows) {
+            for (ValueInterval const& values : intervals_) {
+                 auto new_range = col_.ref().equal_range(range, values);
+                 if (values.is_single_value())
+                     add_single(std::move(new_range));
+                 else
+                     add_multiple(std::move(new_range));
+            }
+        }
     }
-    bool match_row_id(const index_t& idx) const;
-//    const ColumnHandle& column() const { return col_; }
+    bool match_row_id(const index_t& idx) const noexcept {
+        auto const& value = col_.ref().at(idx);
+//        auto const it = std::upper_bound(intervals_.begin(), intervals_.end(), value,
+//                [](value_t const& l, ValueInterval const& r) {
+//                    return !r.contains(l) && (r.r_infinity() || l < r.r());
+//                });
+//        
+//        return !intervals_.empty() && intervals_.front().contains(value);
+        for (auto const& interval : intervals_)
+            if (interval.contains(value))
+                return true;
+        return false;
+    }
     auto _repr() const { return make_repr("ColumnPredicate", {"column", "intervals"}, col_, intervals_); }
 private:
     const ColumnHandle col_;
@@ -396,12 +456,12 @@ private:
 }; // }}}
 // query {{{
 using columns_t = std::vector<ColumnHandle>;
-
 // after info about key and column order was used
 struct FullscanRequest {
+    // todo: make newclass out of this
     FullscanRequest(RowRange range, i64 fcol) : rows(range), last_range_col(fcol) {}
     FullscanRequest(FullscanRequest const&) = default;
-    FullscanRequest & operator=(FullscanRequest && other)  = default;
+    FullscanRequest & operator=(FullscanRequest &&) = default;
     bool operator<(const FullscanRequest& other) const { return rows < other.rows; }
     RowRange rows;
     i64 last_range_col;
@@ -491,7 +551,7 @@ public:
     TablePlayground(Table & table) : table_(table) {}
     void run(Query const& q, OutputFrame & outp) {
         auto const after_range = q.where_pred.perform_range_scan(table_.row_range());
-        auto rows = q.where_pred.perform_full_scan(after_range.fullscan_requests());
+        auto const rows = q.where_pred.perform_full_scan(after_range.fullscan_requests());
         table_.write(q.select_cols, rows, outp);
     }
     void validate() const {

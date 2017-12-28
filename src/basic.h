@@ -13,8 +13,8 @@ void merror(std::string msg, i64 line_number) { std::cerr << "assert >> " << lin
 #define massert(c, msg) do { if (!(c)) merror(msg, __LINE__); } while(0)
 #define massert2(c) massert(c, "")
 #else
-#define massert(...)
-#define massert2(...)
+#define massert(...) do {} while(0);
+#define massert2(...) do {} while(0);
 #endif
 template <typename C> i64 isize(const C& c) { return static_cast<i64>(c.size()); }
 template <typename T, size_t N> i64 isize(const std::array<T, N>& = {}) { return static_cast<i64>(N); }
