@@ -663,7 +663,11 @@ Query parse(const Table& tbl, const std::string line) {
                 no_comma = false;
             else
                 token.pop_back();
-            select_builder.emplace_back(tbl, token);
+            if (token != "*")
+                select_builder.emplace_back(tbl, token);
+            else
+                for (auto const& id : tbl.metadata().columns())
+                    select_builder.emplace_back(tbl, tbl.metadata().column_name(id));
         }
         query_format_check(!select_builder.empty(), "select list empty");
         query_format_check(!no_comma, "no comma after select list");
