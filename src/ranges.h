@@ -2,6 +2,7 @@
 
 template <typename IntType = i64>
 class IntIterator {
+    friend class IntRange;
 public:
     IntIterator(IntType start, IntType step = 1) : p_(start), step_(step) {}
     IntType const& operator*() const noexcept { return p_; }
@@ -22,6 +23,7 @@ public:
     }
     iterator begin() const { return begin_; }
     iterator end() const { return end_; }
+    auto _repr() const { return "IntRange(" + str(begin_.p_) + "," + str(end_.p_) + "," + str(begin_.step_) + ")"; }
 private:
     const iterator begin_;
     const iterator end_;

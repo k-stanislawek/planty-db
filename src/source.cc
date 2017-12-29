@@ -63,6 +63,10 @@ public:
         l_ = (r_ = 0);
         if (sep_pos == std::string_view::npos) {
             auto const val = string_to_int(strv);
+            l_open_ = false;
+            r_open_ = false;
+            l_infinity_ = false;
+            r_infinity_ = false;
             l_ = val;
             r_ = val;
             return;
@@ -148,7 +152,7 @@ class RowNumbersEraser {
 public:
     RowNumbersEraser(RowNumbers & rows) : rows_(rows) {}
     ~RowNumbersEraser() noexcept;
-    void erase(index_t idx) { massert2(indices_.back() < idx); indices_.push_back(idx); }
+    void keep(index_t idx) { massert2(indices_.empty() || indices_.back() < idx); indices_.push_back(idx); }
 private:
     RowNumbers & rows_;
     indices_t indices_;
@@ -207,7 +211,7 @@ public:
     index_t column_id(const cname& name) const { return resolve_column_(name); }
     indices_t column_ids(const cnames& names) const {
         indices_t res;
-        for (auto const& name : names) 
+        for (auto const& name : names)
             res.push_back(resolve_column_(name));
         return res;
     }
@@ -219,7 +223,7 @@ public:
     auto _repr() const { return make_repr("Metadata", {"columns", "key_len"}, columns_, key_len_); }
 private:
     index_t resolve_column_(cname const& name) const {
-        for (auto const i : key_columns())
+        for (auto const i : columns())
             if (columns_[i] == name)
                 return i;
         throw table_error("unknown column name: " + name); 
@@ -433,17 +437,11 @@ class ColumnPredicate { // {{{
 public:
     ColumnPredicate(ColumnHandle h, vector<ValueInterval> intervals)
         : col_(h), intervals_(intervals) {}
-    template <class AddSingleValueRange, class AddMultipleValuesRange>
-    void filter(std::vector<RowRange> const& rows, AddSingleValueRange && add_single, AddMultipleValuesRange && add_multiple) const {
-        for (RowRange const& range : rows) {
-            for (ValueInterval const& values : intervals_) {
-                 auto const new_range = col_.ref().equal_range(range, values);
-                 if (values.is_single_value())
-                     add_single(std::move(new_range));
-                 else
-                     add_multiple(std::move(new_range));
-            }
-        }
+    template <class AddResult>
+    void filter(std::vector<RowRange> const& rows, AddResult add_result) const {
+        for (RowRange const& range : rows)
+            for (ValueInterval const& values : intervals_)
+                add_result(col_.ref().equal_range(range, values), values);
     }
     bool match_row_id(const index_t& idx) const noexcept {
         auto const& value = col_.ref().at(idx);
@@ -509,30 +507,36 @@ public:
         vector<RowRange> rows_to_rangescan = {rows};
         vector<RowRange> rows_to_rangescan_rotate = {};
         for (const i64 c : md_.key_columns()) {
+            dprintln(c, repr(rows_to_rangescan));
             auto& pred = preds_[c];
-            pred.filter(rows_to_rangescan,
-                    [& rows = rows_to_rangescan_rotate] (RowRange r) {
-                        rows.push_back(r);
-                    },
-                    [& rows = outp, & c] (RowRange r) {
-                        rows.emplace_back(r, c);
-                    }
-            );
+            bool const is_last_range_column = (c + 1 == md_.key_len());
+            auto result_handler = [
+                & rows_fullscan = outp,
+                & rows_rangescan = rows_to_rangescan_rotate,
+                & c,
+                & is_last_range_column] (RowRange r, ValueInterval const& v) {
+                    if (!is_last_range_column && v.is_single_value())
+                        rows_rangescan.push_back(r);
+                    else
+                        rows_fullscan.emplace_back(r, c);
+                };
+            pred.filter(rows_to_rangescan, result_handler);
             std::swap(rows_to_rangescan, rows_to_rangescan_rotate);
             rows_to_rangescan_rotate.clear();
         }
         return AfterRangeScan(std::move(outp));
     }
     RowNumbers perform_full_scan(RowRange const& rows, IntRange const& columns) const {
+        dprintln(repr(columns));
         RowNumbers row_numbers(rows);
         {
             RowNumbersEraser eraser(row_numbers);
-            for (auto const i : rows) {
+            for (auto const i : row_numbers.as_range()) {
                 bool can_stay = true;
                 for (auto const c : columns)
                     can_stay &= preds_[c].match_row_id(i);
-                if (!can_stay)
-                    eraser.erase(i);
+                if (can_stay)
+                    eraser.keep(i);
             }
         }
         return row_numbers;
@@ -541,10 +545,15 @@ public:
         std::vector<RowNumbers> outp;
         for (auto const& request : requests)
             outp.push_back(perform_full_scan(request.rows,
-                        IntRange(request.last_range_col + 1, md_.key_len())));
+                        IntRange(request.last_range_col + 1, md_.columns_count())));
         return outp;
     }
-    auto _repr() const { return make_repr("TablePredicate", {"preds"}, preds_); }
+    auto _repr() const {
+        string s = "TablePredicate(\n";
+        for (auto pred : preds_)
+            s += "    " + repr(pred) + "\n";
+        return s;
+    }
 private:
     Metadata const& md_;
     vector<ColumnPredicate> preds_;
@@ -560,7 +569,9 @@ public:
     TablePlayground(Table & table) : table_(table) {}
     void run(Query const& q, OutputFrame & outp) {
         auto const after_range = q.where_pred.perform_range_scan(table_.row_range());
+        dprintln("after range scan:", repr(after_range));
         auto const rows = q.where_pred.perform_full_scan(after_range.fullscan_requests());
+        dprintln("after full scan:", repr(rows));
         table_.write(q.select_cols, rows, outp);
     }
     void validate() const {
@@ -597,9 +608,14 @@ public:
     template <class ...Ts>
     void add_pred(Ts && ...ts) { single_preds_.emplace_back(ts...); }
     ColumnPredicate build(Table const& tbl) {
-        return ColumnPredicate(ColumnHandle(tbl, column_id_), organize(single_preds_));
+        auto intervals = organize(single_preds_);
+        if (intervals.empty())
+            intervals.push_back(ValueInterval(0, 0, true, true, true, true));
+        return ColumnPredicate(ColumnHandle(tbl, column_id_), std::move(intervals));
     }
     static vector<ValueInterval> organize(vector<SingleRangePred> single_preds) {
+        if (single_preds.empty())
+            return {};
         massert2(single_preds.size() == 1);
         massert2(single_preds.front().op().is_single_elem());
         return {ValueInterval(single_preds.front().value())};
@@ -667,7 +683,6 @@ Query parse(const Table& tbl, const std::string line) {
                 no_comma = false;
             else
                 token.pop_back();
-
             const auto sep_pos = token.find_first_of("=<>");
             query_format_check(sep_pos != std::string::npos, "<>= not found");
             const auto col = token.substr(0, sep_pos);
@@ -708,7 +723,6 @@ void main_loop(const CmdArgs& args) {
             log_info("query:", line);
             dprintln(repr(q));
             Measure mes(std::to_string(++count));
-            using namespace std::chrono_literals;
             OutputFrame outp(std::cout);
             t.run(q, outp);
             dprintln();
