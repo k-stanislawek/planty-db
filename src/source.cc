@@ -46,18 +46,17 @@ public:
 private:
     index_t l_, r_;
 }; // }}}
-std::string_view interval_separator = "..";
 
+// ValueInterval {{{
 i64 string_to_int(std::string_view strv) {
-    std::size_t first_non_converted = -1;
+    std::size_t first_non_converted = 0;
     i64 const res = std::stoll(std::string(strv), &first_non_converted);
-    massert2(first_non_converted != std::size_t(-1));
     query_format_check(first_non_converted == strv.size(),
             "Error during converting to integer: " + string(strv));
     return res; 
 }
-
-class ValueInterval { // {{{
+constexpr char const* interval_separator = "..";
+class ValueInterval {
 public:
     ValueInterval(std::string_view strv) {
         auto const sep_pos = strv.find(interval_separator);
@@ -123,10 +122,22 @@ public:
     const value_t& at(index_t index) const noexcept { bound_assert(index, data_); return data_[index]; }
     index_t rows_count() const noexcept { return isize(data_); }
     RowRange equal_range(const RowRange& rng, value_t val) const noexcept {
-        auto r = std::equal_range(data_.begin() + rng.l(), data_.begin() + rng.r() + 1, val);
+        auto const r = std::equal_range(data_.begin() + rng.l(), data_.begin() + rng.r() + 1, val);
         return RowRange(r.first - data_.begin(), r.second - data_.begin() - 1);
     }
-    RowRange equal_range(const RowRange& rng, ValueInterval const& val) const noexcept;
+    RowRange equal_range(RowRange const& rng, ValueInterval const& val) const noexcept {
+        auto l = rng.l();
+        if (!val.l_infinity()) {
+            auto const l_rng = equal_range(rng, val.l());
+            l = val.l_open() ? (l_rng.r() + 1) : l_rng.l();
+        }
+        auto r = rng.r();
+        if (!val.r_infinity()) {
+            auto const r_rng = equal_range(rng, val.r());
+            r = val.r_open() ? (r_rng.l() - 1) : r_rng.r();
+        }
+        return RowRange(l, r);
+    }
     auto _repr() const { return make_repr("IntColumn", {"name", "length"}, name_, isize(data_)); }
 private:
     std::vector<value_t> data_;
@@ -412,9 +423,7 @@ public:
         else if (op == ">") op_ = op_more;
         else unreachable_assert("unknown operator string in PredOp constructor: " + op);
     }
-    bool is_single_elem() const;
-    template <typename ...Args> RowRange filter(Args const&...) const;
-    template <typename ...Args> bool match(Args const&...) const;
+    bool is_single_elem() const { return op_ == op_equal; }
     std::string _str() const { return _repr(); }
     std::string _repr() const { return std::string(1, static_cast<char>(op_)); }
 private:
@@ -425,10 +434,10 @@ public:
     ColumnPredicate(ColumnHandle h, vector<ValueInterval> intervals)
         : col_(h), intervals_(intervals) {}
     template <class AddSingleValueRange, class AddMultipleValuesRange>
-    void filter(std::vector<RowRange> const& rows, AddSingleValueRange const& add_single, AddMultipleValuesRange const& add_multiple) const {
+    void filter(std::vector<RowRange> const& rows, AddSingleValueRange && add_single, AddMultipleValuesRange && add_multiple) const {
         for (RowRange const& range : rows) {
             for (ValueInterval const& values : intervals_) {
-                 auto new_range = col_.ref().equal_range(range, values);
+                 auto const new_range = col_.ref().equal_range(range, values);
                  if (values.is_single_value())
                      add_single(std::move(new_range));
                  else
@@ -502,10 +511,10 @@ public:
         for (const i64 c : md_.key_columns()) {
             auto& pred = preds_[c];
             pred.filter(rows_to_rangescan,
-                    [& rows = rows_to_rangescan_rotate] (RowRange && r) {
+                    [& rows = rows_to_rangescan_rotate] (RowRange r) {
                         rows.push_back(r);
                     },
-                    [& rows = outp, & c] (RowRange && r) {
+                    [& rows = outp, & c] (RowRange r) {
                         rows.emplace_back(r, c);
                     }
             );
@@ -590,7 +599,11 @@ public:
     ColumnPredicate build(Table const& tbl) {
         return ColumnPredicate(ColumnHandle(tbl, column_id_), organize(single_preds_));
     }
-    static vector<ValueInterval> organize(vector<SingleRangePred> single_preds);
+    static vector<ValueInterval> organize(vector<SingleRangePred> single_preds) {
+        massert2(single_preds.size() == 1);
+        massert2(single_preds.front().op().is_single_elem());
+        return {ValueInterval(single_preds.front().value())};
+    }
 private:
     Metadata const& md_;
     const i64 column_id_;
