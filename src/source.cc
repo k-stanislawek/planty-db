@@ -150,12 +150,14 @@ private:
 class RowNumbers; // {{{
 class RowNumbersEraser {
 public:
-    RowNumbersEraser(RowNumbers & rows) : rows_(rows) {}
+    RowNumbersEraser(RowNumbers & rows) : rows_(rows) { indices_.reserve(65536); }
     ~RowNumbersEraser() noexcept;
+    // note: opportunity for optimization
     void keep(index_t idx) { massert2(indices_.empty() || indices_.back() < idx); indices_.push_back(idx); }
 private:
     RowNumbers & rows_;
     indices_t indices_;
+
 };
 class RowNumbers {
     friend class RowNumbersEraser;
