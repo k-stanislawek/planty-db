@@ -8,20 +8,25 @@
 using namespace std::string_literals;
 
 // {{{ exceptions and checks definitions
-#define exception_check(ERROR_NAME, COND, MSG) do { if (!(COND)) throw ERROR_NAME(MSG); } while(0)
+#define exception_check(ERROR_NAME, COND, ...) \
+    do { if (!(COND)) throw ERROR_NAME(__VA_ARGS__); } while(0)
 
-#define add_exception(ERROR_NAME, PARENT) struct ERROR_NAME : public PARENT { ERROR_NAME(string const& error) : PARENT(error) {} }
+#define add_exception(ERROR_NAME, PARENT) struct ERROR_NAME : public PARENT \
+    { template <typename ...Ts> ERROR_NAME(Ts const& ...msg) : PARENT(str(std::forward_as_tuple(msg...))) {} }
 
 add_exception(data_error, std::runtime_error);
 
 add_exception(query_format_error, data_error);
-#define query_format_check(COND, MSG) exception_check(query_format_error, COND, MSG)
+#define query_format_check(COND, ...) exception_check(query_format_error, COND, __VA_ARGS__)
 
 add_exception(table_error, data_error);
-#define table_check(COND, MSG) exception_check(table_error, COND, MSG)
+#define table_check(COND, ...) exception_check(table_error, COND, __VA_ARGS__)
 
 add_exception(query_semantics_error, data_error);
-#define query_semantics_check(COND, MSG) exception_check(query_semantics_error, COND, MSG)
+#define query_semantics_check(COND, ...) exception_check(query_semantics_error, COND, __VA_ARGS__)
+
+add_exception(lexical_cast_error, data_error);
+#define lexical_cast_check(COND, ...) exception_check(lexical_cast_error, COND, __VA_ARGS__)
 
 #undef add_exception
 // }}}
@@ -44,47 +49,42 @@ public:
     void normalize() { l_ = std::min(l_, r_ + 1); }
     auto begin() const { return iterator(l_); }
     auto end() const { return iterator(r_ + 1); }
-    std::string _str() const { return "<" + str(l_) + ".." + str(r_) + ">"; }
-    std::string _repr() const { return make_repr("RowRange", {"l", "r"}, l_, r_); }
+    string _str() const { return "<" + str(l_) + ".." + str(r_) + ">"; }
+    string _repr() const { return make_repr("RowRange", {"l", "r"}, l_, r_); }
 private:
     index_t l_, r_;
 }; // }}}
 // ValueInterval {{{
-i64 string_to_int(std::string_view strv) {
-    std::size_t first_non_converted = 0;
-    i64 const res = std::stoll(std::string(strv), &first_non_converted);
-    query_format_check(first_non_converted == strv.size(),
-            "Error during converting to integer: " + string(strv));
-    return res;
-}
 constexpr char const* interval_separator = "..";
 class ValueInterval {
+    static i64 parse_i64_(string_view strv) {
+        auto [res, is_ok] = to_i64(strv);
+        query_format_check(is_ok, "Error during converting to integer:", strv);
+        return res;
+    }
 public:
-    ValueInterval(std::string_view strv) {
+    ValueInterval(string_view strv) {
         auto const sep_pos = strv.find(interval_separator);
-        l_ = (r_ = 0);
-        if (sep_pos == std::string_view::npos) {
-            auto const val = string_to_int(strv);
-            l_open_ = false;
-            r_open_ = false;
-            l_infinity_ = false;
-            r_infinity_ = false;
-            l_ = val;
-            r_ = val;
+        l_open_ = r_open_ = l_infinity_ = r_infinity_ = false;
+        l_ = r_ = 0;
+        if (sep_pos == string_view::npos) {
+            // exact value
+            auto const val = parse_i64_(strv);
+            l_ = r_ = val;
             return;
         }
         // e.g. [1..2), (1..4], (..3), (..), [2..)
-        query_format_check(sep_pos > 0 && sep_pos + 2 < strv.size(), "bad '..' position: " + string(strv));
+        query_format_check(sep_pos > 0 && sep_pos + 2 < strv.size(), "bad '..' position: ", strv);
         l_open_ = strv.front() == '(';
         r_open_ = strv.back() == ')';
-        query_format_check(l_open_ || strv.front() == '[', "bad range open: " + string(strv));
-        query_format_check(r_open_ || strv.back() == ']', "bad range close: " + string(strv));
+        query_format_check(l_open_ || strv.front() == '[', "bad range open: ", strv);
+        query_format_check(r_open_ || strv.back() == ']', "bad range close: ", strv);
         l_infinity_ = (sep_pos == 1);
         r_infinity_ = (sep_pos + 2 == strv.size() - 1);
         if (!l_infinity_)
-            l_ = string_to_int(strv.substr(1, sep_pos - 1));
+            l_ = parse_i64_(strv.substr(1, sep_pos - 1));
         if (!r_infinity_)
-            r_ = string_to_int(strv.substr(sep_pos + 2, strv.size() - 1 - (sep_pos + 2)));
+            r_ = parse_i64_(strv.substr(sep_pos + 2, strv.size() - 1 - (sep_pos + 2)));
     }
     ValueInterval(value_t l0, value_t r0, bool l_open0 = false, bool r_open0 = false,
         bool l_infinity0 = false, bool r_infinity0 = false) noexcept : l_(l0), r_(r0), l_open_(l_open0),
@@ -103,14 +103,14 @@ public:
         bool const r_contains = r_infinity_ || (r_open_ ? (r_ > v) : (r_ >= v));
         return l_contains && r_contains;
     }
-    std::string _repr() const {
+    string _repr() const {
         auto bracket1 = (l_open() ? '(' : '[');
         auto bracket2 = (r_open() ? ')' : ']');
-        auto value1 = (l_infinity() ? std::string("") : repr(l_));
-        auto value2 = (r_infinity() ? std::string("") : repr(r_));
+        auto value1 = (l_infinity() ? string("") : repr(l_));
+        auto value2 = (r_infinity() ? string("") : repr(r_));
         return bracket1 + value1 + ".." + value2 + bracket2;
     }
-    std::string _str() const { return _repr(); }
+    string _str() const { return _repr(); }
 private:
     value_t l_, r_;
     bool l_open_, r_open_, l_infinity_, r_infinity_;
@@ -144,9 +144,9 @@ public:
         }
         return RowRange(l, r);
     }
-    std::string _repr() const { return make_repr("IntColumn", {"name", "length"}, name_, isize(data_)); }
+    string _repr() const { return make_repr("IntColumn", {"name", "length"}, name_, isize(data_)); }
 private:
-    std::vector<value_t> data_;
+    vector<value_t> data_;
     cname name_;
 }; // }}}
 class RowNumbers; // {{{
@@ -185,14 +185,14 @@ public:
                 f(row_id);
     }
     template <typename F>
-    static void foreach(std::vector<RowNumbers> const& rows, F const& f) {
+    static void foreach(vector<RowNumbers> const& rows, F const& f) {
         for (auto const& r : rows)
             r.foreach(f);
     }
-    std::string _repr() const {
+    string _repr() const {
         return make_repr("RowNumbers", {"indices"}, str(*this));
     }
-    std::string _str() const {
+    string _str() const {
         return indices_set_used_ ? "{" + str(isize(indices_)) + " rows}" : str(range_);
     }
 private:
@@ -205,7 +205,7 @@ RowNumbersEraser::~RowNumbersEraser() noexcept {
     if (isize(indices_) == rows_.range_.len())
         return;
     rows_.indices_set_used_ = true;
-    rows_.indices_ = std::move(indices_);
+    rows_.indices_ = move(indices_);
 }
 // }}}
 // metadata {{{
@@ -229,7 +229,7 @@ public:
     IntRange columns() const { return IntRange(0, columns_count()); }
     auto const& key_len() const { return key_len_; }
     IntRange key_columns() const { return IntRange(0, key_len()); }
-    std::string _repr() const { return make_repr("Metadata", {"columns", "key_len"}, columns_, key_len_); }
+    string _repr() const { return make_repr("Metadata", {"columns", "key_len"}, columns_, key_len_); }
 private:
     index_t resolve_column_(cname const& name) const {
         for (auto const i : columns())
@@ -252,7 +252,7 @@ public:
         i64 key_len = 0;
         bool metadata_found = false;
         while (sep != '\n' && !metadata_found) {
-            std::string s;
+            string s;
             is_ >> s;
             table_check(!is_.eof(), "empty header");
             if (s.back() == ';') {
@@ -262,33 +262,14 @@ public:
             header.push_back(s);
             is_.read(&sep, 1);
             table_check(!(sep != '\n' && sep != '\t' && sep != ' ' && sep != ';'),
-                    "Bad separator: ascii code " + std::to_string(static_cast<int>(sep)));
+                    "Bad separator: ascii code", static_cast<int>(sep));
         }
         if (metadata_found)
             is_ >> key_len;
         ++(*this);
-        auto m = Metadata(std::move(header), std::move(key_len));
+        auto m = Metadata(move(header), move(key_len));
         dprintln(repr(m));
         return m;
-    }
-    vstr get_header() {
-        char sep = '\0';
-        vstr header;
-        u64 key_len = 0;
-        while (sep != '\n' && sep != ';') {
-            std::string s;
-            is_ >> s;
-            table_check(!is_.eof(), "empty header");
-            header.push_back(s);
-            is_.read(&sep, 1);
-            table_check(!(sep != '\n' && sep != '\t' && sep != ' ' && sep != ';'),
-                    "Bad separator: ascii code " + std::to_string(static_cast<int>(sep)));
-        }
-        if (sep == ';')
-            is_ >> key_len;
-        dprintln("header", header);
-        ++(*this);
-        return header;
     }
     InputFrame& operator++() { is_ >> val_; return *this; }
     bool end() const { return is_.eof(); }
@@ -323,13 +304,13 @@ private:
 class ColumnHandle;
 class Table {
 public:
-    Table(Metadata metadata0, std::vector<IntColumn::ptr> columns0)
-            : md_(std::move(metadata0)), columns_(std::move(columns0)) {
+    Table(Metadata metadata0, vector<IntColumn::ptr> columns0)
+            : md_(move(metadata0)), columns_(move(columns0)) {
         massert2(md_.columns_count() == isize(columns_));
     }
 public:
     static Table read(InputFrame& frame);
-    void write(const vector<ColumnHandle>& columns, const std::vector<RowNumbers>& rows, OutputFrame& frame);
+    void write(const vector<ColumnHandle>& columns, const vector<RowNumbers>& rows, OutputFrame& frame);
     void write(const cnames& names, const vector<RowNumbers>& rows, OutputFrame& frame);
 
     i64 rows_count() const { return columns_[0]->rows_count(); }
@@ -349,7 +330,7 @@ public:
     IntRange columns() const { return md_.columns(); }
 private:
     Metadata md_;
-    std::vector<IntColumn::ptr> columns_;
+    vector<IntColumn::ptr> columns_;
 };
 // }}}
 // column handle {{{
@@ -361,7 +342,7 @@ public:
         col_id_(column_id), col_(*tbl.column(col_id_)) {}
     const IntColumn& ref() const { return col_; }
     index_t id() const { return col_id_; }
-    std::string _repr() const { return make_repr("ColumnHandle", {"column"}, col_.get()); }
+    string _repr() const { return make_repr("ColumnHandle", {"column"}, col_.get()); }
 private:
     index_t col_id_;
     const IntColumn::ref col_;
@@ -377,7 +358,7 @@ void Table::write(const vector<ColumnHandle>& columns, const vector<RowNumbers>&
 }
 Table Table::read(InputFrame& frame) {
     auto md = frame.get_metadata();
-    std::vector<IntColumn::ptr> columns(md.columns_count());
+    vector<IntColumn::ptr> columns(md.columns_count());
     for (auto const i : md.columns()) {
         columns[i] = IntColumn::make();
         columns[i]->name() = md.column_name(i);
@@ -388,11 +369,11 @@ Table Table::read(InputFrame& frame) {
         if (++column_it == columns.end()) column_it = columns.begin();
     }
     table_check(column_it == columns.begin(), "couldn't read the same number of values for each column");
-    Table tbl(std::move(md), std::move(columns));
+    Table tbl(move(md), move(columns));
     dprintln("rows:", tbl.rows_count(), "columns:", tbl.columns_count());
     return tbl;
 }
-void Table::write(const cnames& names, const std::vector<RowNumbers>& rows, OutputFrame& frame) {
+void Table::write(const cnames& names, const vector<RowNumbers>& rows, OutputFrame& frame) {
     frame.add_header(names);
     auto const columns = md_.column_ids(names);
     auto const columns_count = isize(columns);
@@ -421,7 +402,7 @@ public:
     auto equal_range(const T& value) const {
         return column().equal_range(row_range(), value);
     }
-    std::string _repr() const { return make_repr("ColumnBinding", {"column", "row_range"}, col_, rng_); }
+    string _repr() const { return make_repr("ColumnBinding", {"column", "row_range"}, col_, rng_); }
 private:
     const IntColumn& col_;
     const RowRange& rng_;
@@ -430,15 +411,15 @@ private:
 class PredOp { // {{{
 public:
     enum Op : char {op_less = '<', op_equal = '=', op_more = '>'};
-    PredOp(const std::string& op) {
+    PredOp(const string& op) {
         if (op == "<") op_ = op_less;
         else if (op == "=") op_ = op_equal;
         else if (op == ">") op_ = op_more;
         else unreachable_assert("unknown operator string in PredOp constructor: " + op);
     }
     bool is_single_elem() const { return op_ == op_equal; }
-    std::string _str() const { return _repr(); }
-    std::string _repr() const { return std::string(1, static_cast<char>(op_)); }
+    string _str() const { return _repr(); }
+    string _repr() const { return string(1, static_cast<char>(op_)); }
 private:
     Op op_;
 }; // }}}
@@ -447,7 +428,7 @@ public:
     ColumnPredicate(ColumnHandle h, vector<ValueInterval> intervals)
         : col_(h), intervals_(intervals) {}
     template <class AddResult>
-    void filter(std::vector<RowRange> const& rows, AddResult add_result) const {
+    void filter(vector<RowRange> const& rows, AddResult add_result) const {
         for (RowRange const& range : rows)
             for (ValueInterval const& values : intervals_)
                 add_result(col_.ref().equal_range(range, values), values);
@@ -465,13 +446,13 @@ public:
                 return true;
         return false;
     }
-    std::string _repr() const { return make_repr("ColumnPredicate", {"column", "intervals"}, col_, intervals_); }
+    string _repr() const { return make_repr("ColumnPredicate", {"column", "intervals"}, col_, intervals_); }
 private:
     const ColumnHandle col_;
     vector<ValueInterval> intervals_;
 }; // }}}
 // query {{{
-using columns_t = std::vector<ColumnHandle>;
+using columns_t = vector<ColumnHandle>;
 // after info about key and column order was used
 struct FullscanRequest {
     FullscanRequest(RowRange range, i64 fcol) : rows(range), last_range_col(fcol) {}
@@ -482,20 +463,20 @@ struct FullscanRequest {
     bool operator<(const FullscanRequest& other) const { return rows < other.rows; }
     RowRange rows;
     i64 last_range_col;
-    std::string _repr() const { return make_repr("FullscanRequest", {"rows", "last_range_col"}, rows, last_range_col); }
-    std::string _str() const { return "(last_col=" + str(last_range_col) + ", rows=" + str(rows) + ")"; }
+    string _repr() const { return make_repr("FullscanRequest", {"rows", "last_range_col"}, rows, last_range_col); }
+    string _str() const { return "(last_col=" + str(last_range_col) + ", rows=" + str(rows) + ")"; }
 };
 class AfterRangeScan {
 public:
-    AfterRangeScan(std::vector<FullscanRequest> fullscan_requests_0) noexcept
-            : fullscan_requests_(std::move(fullscan_requests_0)) {
-        std::sort(fullscan_requests_.begin(), fullscan_requests_.end());
+    AfterRangeScan(vector<FullscanRequest> fullscan_requests_0) noexcept
+            : fullscan_requests_(move(fullscan_requests_0)) {
+        fun::sort(fullscan_requests_);
     }
     vector<FullscanRequest> const& fullscan_requests() const noexcept { return fullscan_requests_; }
-    std::string _repr() const {
+    string _repr() const {
         return make_repr("AfterRangeScan", {"fullscan_requests"}, fullscan_requests_);
     }
-    std::string _str() const {
+    string _str() const {
         return str(fullscan_requests_);
     }
 private:
@@ -503,10 +484,10 @@ private:
 };
 class AfterFullscan {
 public:
-    AfterFullscan(vector<RowNumbers> rows_0) noexcept : rows_(std::move(rows_0)) {}
+    AfterFullscan(vector<RowNumbers> rows_0) noexcept : rows_(move(rows_0)) {}
     vector<RowNumbers> const& rows() const noexcept { return rows_; }
-    std::string _repr() const { return make_repr("AfterFullscan", {"rows"}, rows_); }
-    std::string _str() const { return _repr(); }
+    string _repr() const { return make_repr("AfterFullscan", {"rows"}, rows_); }
+    string _str() const { return _repr(); }
 private:
     vector<RowNumbers> rows_;
 };
@@ -535,7 +516,7 @@ public:
             std::swap(rows_to_rangescan, rows_to_rangescan_rotate);
             rows_to_rangescan_rotate.clear();
         }
-        return AfterRangeScan(std::move(outp));
+        return AfterRangeScan(move(outp));
     }
     RowNumbers perform_full_scan(RowRange const& rows, IntRange const& columns) const {
         RowNumbers row_numbers(rows);
@@ -552,13 +533,13 @@ public:
         return row_numbers;
     }
     vector<RowNumbers> perform_full_scan(vector<FullscanRequest> const& requests) const {
-        std::vector<RowNumbers> outp;
+        vector<RowNumbers> outp;
         for (auto const& request : requests)
             outp.push_back(perform_full_scan(request.rows,
                         IntRange(request.last_range_col + 1, md_.columns_count())));
         return outp;
     }
-    std::string _repr() const {
+    string _repr() const {
         auto s = "TablePredicate(\n"s;
         for (auto const& pred : preds_)
             s += "    " + repr(pred) + "\n";
@@ -571,7 +552,7 @@ private:
 struct Query {
     TablePredicate where_pred;
     columns_t select_cols;
-    std::string _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_pred, select_cols); }
+    string _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_pred, select_cols); }
 };
 // }}}
 class TablePlayground { // {{{
@@ -591,8 +572,8 @@ public:
             for (auto const j : table_.key_columns())
                 current_value.push_back(table_.column(j)->at(i));
             table_check(i == 0 || !vector_less(current_value, prev_value),
-                "row " + std::to_string(i) + "'s key is lesser than previous row");
-            prev_value = std::move(current_value);
+                "key of row",  i, "is lesser than previous row");
+            prev_value = move(current_value);
         }
     }
 private:
@@ -601,13 +582,13 @@ private:
 class SingleRangePred { // {{{
 public:
     template <class T1, class T2>
-    SingleRangePred(T1 && op_0, T2 && value_0) : op_(op_0), value_(std::string_view(value_0)) {}
+    SingleRangePred(T1 && op_0, T2 && value_0) : op_(op_0), value_(string_view(value_0)) {}
     PredOp const& op() const noexcept { return op_; }
     ValueInterval const& value() const noexcept { return value_; }
-    std::string _repr() const {
+    string _repr() const {
         return make_repr("SingleRangePred", {"op", "value"}, op_, value_);
     }
-    std::string _str() const { return _repr(); }
+    string _str() const { return _repr(); }
 private:
     PredOp op_;
     ValueInterval value_;
@@ -621,7 +602,7 @@ public:
         auto intervals = organize(single_preds_);
         if (intervals.empty())
             intervals.push_back(ValueInterval(0, 0, true, true, true, true));
-        return ColumnPredicate(ColumnHandle(tbl, column_id_), std::move(intervals));
+        return ColumnPredicate(ColumnHandle(tbl, column_id_), move(intervals));
     }
     static vector<ValueInterval> organize(vector<SingleRangePred> single_preds) {
         if (single_preds.empty())
@@ -649,19 +630,19 @@ public:
         vector<ColumnPredicate> preds;
         for (auto pred : preds_)
             preds.push_back(pred.build(tbl));
-        return TablePredicate(md_, std::move(preds));
+        return TablePredicate(md_, move(preds));
     }
 private:
     const Metadata& md_;
     vector<RangePredBuilder> preds_;
 }; // }}}
 // parse {{{
-Query parse(const Table& tbl, const std::string line) {
+Query parse(const Table& tbl, const string line) {
     TablePredicateBuilder where_builder(tbl.metadata());
     columns_t select_builder;
     // todo: select_builder: use metadata instead of table
     std::stringstream ss(line);
-    std::string token;
+    string token;
     query_format_check(!ss.eof(), "empty line");
     ss >> token;
     query_format_check(token == "select", "no select at the beginning");
@@ -683,7 +664,7 @@ Query parse(const Table& tbl, const std::string line) {
         query_format_check(!no_comma, "no comma after select list");
     }
     if (ss.eof()) {
-        return Query{where_builder.build(tbl), std::move(select_builder)};
+        return Query{where_builder.build(tbl), move(select_builder)};
     }
     ss >> token;
     query_format_check(token == "where", "something else than 'where' after select list: " + token);
@@ -698,9 +679,9 @@ Query parse(const Table& tbl, const std::string line) {
             else
                 token.pop_back();
             const auto sep_pos = token.find_first_of("=<>");
-            query_format_check(sep_pos != std::string::npos, "<>= not found");
+            query_format_check(sep_pos != string::npos, "<>= not found");
             const auto col = token.substr(0, sep_pos);
-            const auto sep = PredOp(std::string(1, token[sep_pos]));
+            const auto sep = PredOp(string(1, token[sep_pos]));
             const auto val = token.substr(sep_pos + 1, isize(token) - sep_pos - 1);
             where_builder.add_pred(col, sep, val);
         }
@@ -708,7 +689,7 @@ Query parse(const Table& tbl, const std::string line) {
         query_format_check(!no_comma, "no comma after where list");
     }
     if (ss.eof()) {
-        return Query{where_builder.build(tbl), std::move(select_builder)};
+        return Query{where_builder.build(tbl), move(select_builder)};
     }
     ss >> token;
     throw query_format_error("there's something after 'where': " + token);
@@ -716,7 +697,7 @@ Query parse(const Table& tbl, const std::string line) {
 // parse }}}
 // main loop {{{
 struct CmdArgs {
-    std::string filename;
+    string filename;
 };
 void main_loop(const CmdArgs& args) {
     std::ifstream ifs(args.filename);
@@ -727,7 +708,7 @@ void main_loop(const CmdArgs& args) {
 #ifndef NO_VALIDATION
     t.validate();
 #endif
-    std::string line;
+    string line;
     i64 count = 0;
     while (std::getline(std::cin, line)) {
         try {
@@ -736,7 +717,7 @@ void main_loop(const CmdArgs& args) {
             println("query:", line);
             log_info("query:", line);
             dprintln(repr(q));
-            Measure mes(std::to_string(++count));
+            Measure mes(str(++count));
             OutputFrame outp(std::cout);
             t.run(q, outp);
             dprintln();

@@ -12,6 +12,7 @@ using cnames = std::vector<std::string>;
 using std::vector;
 using std::string;
 using std::string_view;
+using std::move;
 
 auto log_info = [](auto const& ...ts) { lprintln("info:", ts...); };
 auto log_plan = [](auto const& ...ts) { lprintln("plan:", ts...); };

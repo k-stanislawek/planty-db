@@ -188,4 +188,10 @@ template <class ...Ts> void dprintln(Ts const&...) {}
 #endif
 // }}}
 
-
+// {{{ lexical cast
+std::pair<i64, bool> to_i64(std::string_view strv) {
+    std::size_t first_non_converted = 0;
+    i64 const res = std::stoll(std::string(strv), &first_non_converted);
+    return {res, first_non_converted == strv.size()};
+}
+// }}}
