@@ -5,6 +5,8 @@
 #include "measure.h"
 #include "ranges.h"
 
+using namespace std::string_literals;
+
 // {{{ exceptions and checks definitions
 #define exception_check(ERROR_NAME, COND, MSG) do { if (!(COND)) throw ERROR_NAME(MSG); } while(0)
 
@@ -40,20 +42,20 @@ public:
     index_t& r() { return r_; }
     index_t len() const { return r_ - l_ + 1; }
     void normalize() { l_ = std::min(l_, r_ + 1); }
-    auto _repr() const { return make_repr("RowRange", {"l", "r"}, l_, r_); }
     auto begin() const { return iterator(l_); }
     auto end() const { return iterator(r_ + 1); }
+    std::string _str() const { return "<" + str(l_) + ".." + str(r_) + ">"; }
+    std::string _repr() const { return make_repr("RowRange", {"l", "r"}, l_, r_); }
 private:
     index_t l_, r_;
 }; // }}}
-
 // ValueInterval {{{
 i64 string_to_int(std::string_view strv) {
     std::size_t first_non_converted = 0;
     i64 const res = std::stoll(std::string(strv), &first_non_converted);
     query_format_check(first_non_converted == strv.size(),
             "Error during converting to integer: " + string(strv));
-    return res; 
+    return res;
 }
 constexpr char const* interval_separator = "..";
 class ValueInterval {
@@ -101,14 +103,14 @@ public:
         bool const r_contains = r_infinity_ || (r_open_ ? (r_ > v) : (r_ >= v));
         return l_contains && r_contains;
     }
-    auto _repr() const {
+    std::string _repr() const {
         auto bracket1 = (l_open() ? '(' : '[');
         auto bracket2 = (r_open() ? ')' : ']');
         auto value1 = (l_infinity() ? std::string("") : repr(l_));
         auto value2 = (r_infinity() ? std::string("") : repr(r_));
         return bracket1 + value1 + ".." + value2 + bracket2;
     }
-    auto _str() const { return _repr(); }
+    std::string _str() const { return _repr(); }
 private:
     value_t l_, r_;
     bool l_open_, r_open_, l_infinity_, r_infinity_;
@@ -119,7 +121,7 @@ public:
     using ptr = std::unique_ptr<IntColumn>;
 
     static ptr make() { return std::make_unique<IntColumn>(); }
-    
+
     void push_back(const value_t elem) { data_.push_back(elem); }
     cname& name() noexcept { return name_; }
     const cname& name() const noexcept { return name_; }
@@ -142,7 +144,7 @@ public:
         }
         return RowRange(l, r);
     }
-    auto _repr() const { return make_repr("IntColumn", {"name", "length"}, name_, isize(data_)); }
+    std::string _repr() const { return make_repr("IntColumn", {"name", "length"}, name_, isize(data_)); }
 private:
     std::vector<value_t> data_;
     cname name_;
@@ -187,9 +189,12 @@ public:
         for (auto const& r : rows)
             r.foreach(f);
     }
-    auto _repr() const { return make_repr("RowNumbers",
-            {"range", "indices", "indices_set_used"},
-            range_, indices_, indices_set_used_); }
+    std::string _repr() const {
+        return make_repr("RowNumbers", {"indices"}, str(*this));
+    }
+    std::string _str() const {
+        return indices_set_used_ ? "{" + str(isize(indices_)) + " rows}" : str(range_);
+    }
 private:
     RowRange range_;
     indices_t indices_ = {};
@@ -197,6 +202,8 @@ private:
 };
 RowNumbersEraser::~RowNumbersEraser() noexcept {
     massert2(!rows_.indices_set_used_);
+    if (isize(indices_) == rows_.range_.len())
+        return;
     rows_.indices_set_used_ = true;
     rows_.indices_ = std::move(indices_);
 }
@@ -207,7 +214,7 @@ public:
     Metadata(vstr&& columns0, i64 key_len0) : columns_(columns0), key_len_(key_len0) {
         massert2(!columns_.empty());
         table_check(key_len_ <= columns_count(),
-                "key_len " + to_str(key_len_) + " exceeds header length " + to_str(columns_count()));
+                "key_len " + str(key_len_) + " exceeds header length " + str(columns_count()));
     }
     i64 columns_count() const { return isize(columns_); }
     index_t column_id(const cname& name) const { return resolve_column_(name); }
@@ -222,13 +229,13 @@ public:
     IntRange columns() const { return IntRange(0, columns_count()); }
     auto const& key_len() const { return key_len_; }
     IntRange key_columns() const { return IntRange(0, key_len()); }
-    auto _repr() const { return make_repr("Metadata", {"columns", "key_len"}, columns_, key_len_); }
+    std::string _repr() const { return make_repr("Metadata", {"columns", "key_len"}, columns_, key_len_); }
 private:
     index_t resolve_column_(cname const& name) const {
         for (auto const i : columns())
             if (columns_[i] == name)
                 return i;
-        throw table_error("unknown column name: " + name); 
+        throw table_error("unknown column name: " + name);
     }
     vstr columns_;
     i64 key_len_;
@@ -354,7 +361,7 @@ public:
         col_id_(column_id), col_(*tbl.column(col_id_)) {}
     const IntColumn& ref() const { return col_; }
     index_t id() const { return col_id_; }
-    auto _repr() const { return make_repr("ColumnHandle", {"column"}, col_.get()); }
+    std::string _repr() const { return make_repr("ColumnHandle", {"column"}, col_.get()); }
 private:
     index_t col_id_;
     const IntColumn::ref col_;
@@ -414,7 +421,7 @@ public:
     auto equal_range(const T& value) const {
         return column().equal_range(row_range(), value);
     }
-    auto _repr() const { return make_repr("ColumnBinding", {"column", "row_range"}, col_, rng_); }
+    std::string _repr() const { return make_repr("ColumnBinding", {"column", "row_range"}, col_, rng_); }
 private:
     const IntColumn& col_;
     const RowRange& rng_;
@@ -451,14 +458,14 @@ public:
 //                [](value_t const& l, ValueInterval const& r) {
 //                    return !r.contains(l) && (r.r_infinity() || l < r.r());
 //                });
-//        
+//
 //        return !intervals_.empty() && intervals_.front().contains(value);
         for (auto const& interval : intervals_)
             if (interval.contains(value))
                 return true;
         return false;
     }
-    auto _repr() const { return make_repr("ColumnPredicate", {"column", "intervals"}, col_, intervals_); }
+    std::string _repr() const { return make_repr("ColumnPredicate", {"column", "intervals"}, col_, intervals_); }
 private:
     const ColumnHandle col_;
     vector<ValueInterval> intervals_;
@@ -467,14 +474,16 @@ private:
 using columns_t = std::vector<ColumnHandle>;
 // after info about key and column order was used
 struct FullscanRequest {
-    // todo: make newclass out of this
     FullscanRequest(RowRange range, i64 fcol) : rows(range), last_range_col(fcol) {}
     FullscanRequest(FullscanRequest const&) = default;
+    FullscanRequest(FullscanRequest &&) = default;
     FullscanRequest & operator=(FullscanRequest &&) = default;
+    FullscanRequest & operator=(FullscanRequest const&) = default;
     bool operator<(const FullscanRequest& other) const { return rows < other.rows; }
     RowRange rows;
     i64 last_range_col;
-    auto _repr() const { return make_repr("FullscanRequest", {"rows", "last_range_col"}, rows, last_range_col); }
+    std::string _repr() const { return make_repr("FullscanRequest", {"rows", "last_range_col"}, rows, last_range_col); }
+    std::string _str() const { return "(last_col=" + str(last_range_col) + ", rows=" + str(rows) + ")"; }
 };
 class AfterRangeScan {
 public:
@@ -483,10 +492,12 @@ public:
         std::sort(fullscan_requests_.begin(), fullscan_requests_.end());
     }
     vector<FullscanRequest> const& fullscan_requests() const noexcept { return fullscan_requests_; }
-    auto _repr() const {
+    std::string _repr() const {
         return make_repr("AfterRangeScan", {"fullscan_requests"}, fullscan_requests_);
     }
-    auto _str() const { return _repr(); }
+    std::string _str() const { 
+        return str(fullscan_requests_);
+    }
 private:
     vector<FullscanRequest> fullscan_requests_;
 };
@@ -494,8 +505,8 @@ class AfterFullscan {
 public:
     AfterFullscan(vector<RowNumbers> rows_0) noexcept : rows_(std::move(rows_0)) {}
     vector<RowNumbers> const& rows() const noexcept { return rows_; }
-    auto _repr() const { return make_repr("AfterFullscan", {"rows"}, rows_); }
-    auto _str() const { return _repr(); }
+    std::string _repr() const { return make_repr("AfterFullscan", {"rows"}, rows_); }
+    std::string _str() const { return _repr(); }
 private:
     vector<RowNumbers> rows_;
 };
@@ -509,18 +520,16 @@ public:
         vector<RowRange> rows_to_rangescan = {rows};
         vector<RowRange> rows_to_rangescan_rotate = {};
         for (const i64 c : md_.key_columns()) {
-            dprintln(c, repr(rows_to_rangescan));
+            if (rows_to_rangescan.empty())
+                break;
+            log_plan("Range scan for column:", str(c), "rows:", str(rows_to_rangescan));
             auto& pred = preds_[c];
             bool const is_last_range_column = (c + 1 == md_.key_len());
-            auto result_handler = [
-                & rows_fullscan = outp,
-                & rows_rangescan = rows_to_rangescan_rotate,
-                & c,
-                & is_last_range_column] (RowRange r, ValueInterval const& v) {
+            auto result_handler = [&] (RowRange r, ValueInterval const& v) {
                     if (!is_last_range_column && v.is_single_value())
-                        rows_rangescan.push_back(r);
+                        rows_to_rangescan_rotate.push_back(r);
                     else
-                        rows_fullscan.emplace_back(r, c);
+                        outp.emplace_back(r, c);
                 };
             pred.filter(rows_to_rangescan, result_handler);
             std::swap(rows_to_rangescan, rows_to_rangescan_rotate);
@@ -529,7 +538,6 @@ public:
         return AfterRangeScan(std::move(outp));
     }
     RowNumbers perform_full_scan(RowRange const& rows, IntRange const& columns) const {
-        dprintln(repr(columns));
         RowNumbers row_numbers(rows);
         {
             RowNumbersEraser eraser(row_numbers);
@@ -550,9 +558,9 @@ public:
                         IntRange(request.last_range_col + 1, md_.columns_count())));
         return outp;
     }
-    auto _repr() const {
-        string s = "TablePredicate(\n";
-        for (auto pred : preds_)
+    std::string _repr() const {
+        auto s = "TablePredicate(\n"s;
+        for (auto const& pred : preds_)
             s += "    " + repr(pred) + "\n";
         return s;
     }
@@ -563,7 +571,7 @@ private:
 struct Query {
     TablePredicate where_pred;
     columns_t select_cols;
-    auto _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_pred, select_cols); }
+    std::string _repr() const { return make_repr("Query", {"where_preds", "select_cols"}, where_pred, select_cols); }
 };
 // }}}
 class TablePlayground { // {{{
@@ -571,9 +579,9 @@ public:
     TablePlayground(Table & table) : table_(table) {}
     void run(Query const& q, OutputFrame & outp) {
         auto const after_range = q.where_pred.perform_range_scan(table_.row_range());
-        dprintln("after range scan:", repr(after_range));
+        log_plan("Range scan result:", str(after_range));
         auto const rows = q.where_pred.perform_full_scan(after_range.fullscan_requests());
-        dprintln("after full scan:", repr(rows));
+        log_plan("Full scan result:", str(rows));
         table_.write(q.select_cols, rows, outp);
     }
     void validate() const {
@@ -596,10 +604,10 @@ public:
     SingleRangePred(T1 && op_0, T2 && value_0) : op_(op_0), value_(std::string_view(value_0)) {}
     PredOp const& op() const noexcept { return op_; }
     ValueInterval const& value() const noexcept { return value_; }
-    auto _repr() const {
+    std::string _repr() const {
         return make_repr("SingleRangePred", {"op", "value"}, op_, value_);
     }
-    auto _str() const { return _repr(); }
+    std::string _str() const { return _repr(); }
 private:
     PredOp op_;
     ValueInterval value_;
