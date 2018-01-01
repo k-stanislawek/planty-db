@@ -84,8 +84,8 @@ def read_map(p):
     m = {}
     with open(p, "r") as f:
         for line in f:
-            t = line.split(" ")
-            m[t[0]] = int(t[1])
+            k, v = line.split(" ")
+            m[k] = int(v)
     return m
 
 def diff_perf_mins(fnew, fprev):
