@@ -74,6 +74,7 @@ public:
             return;
         }
         // e.g. [1..2), (1..4], (..3), (..), [2..)
+        // todo: regexp
         query_format_check(sep_pos > 0 && sep_pos + 2 < strv.size(), "bad '..' position: ", strv);
         l_open_ = strv.front() == '(';
         r_open_ = strv.back() == ')';
@@ -106,8 +107,8 @@ public:
     string _repr() const {
         auto bracket1 = (l_open() ? '(' : '[');
         auto bracket2 = (r_open() ? ')' : ']');
-        auto value1 = (l_infinity() ? string("") : repr(l_));
-        auto value2 = (r_infinity() ? string("") : repr(r_));
+        auto value1 = (l_infinity() ? ""s : repr(l_));
+        auto value2 = (r_infinity() ? ""s : repr(r_));
         return bracket1 + value1 + ".." + value2 + bracket2;
     }
     string _str() const { return _repr(); }
@@ -132,6 +133,23 @@ public:
         return RowRange(r.first - data_.begin(), r.second - data_.begin() - 1);
     }
     RowRange equal_range(RowRange const& rng, ValueInterval const& val) const noexcept {
+        // todo:
+        // class IntervalSide: // two values: left and right
+        //     Side other() const;
+        //     bool operator==(Side other) const;
+        //     ...
+        // class ValueIntervalSide {
+        //     ValueIntervalSide(Side side, string_view value, string_view paren);
+        //     Side side() const;
+        //     bool left() const;
+        // private:
+        //    side_, value_, infinity_, open_;
+        // }
+        // class RowIntervalSide:
+        //     RowIntervalSide(Side side, i64 index);
+        //     narrow();
+        //     i64 first_index_behind()
+        //         return index_ + (side_.left() ? -1 : 1);
         auto l = rng.l();
         if (!val.l_infinity()) {
             auto const l_rng = equal_range(rng, val.l());
@@ -159,7 +177,6 @@ public:
 private:
     RowNumbers & rows_;
     indices_t indices_;
-
 };
 class RowNumbers {
     friend class RowNumbersEraser;
@@ -181,16 +198,13 @@ public:
             for (const auto& row_id : indices_)
                 f(row_id);
         else
-            for (i64 row_id = range_.l(); row_id <= range_.r(); row_id++)
+            for (auto const row_id : range_)
                 f(row_id);
     }
     template <typename F>
     static void foreach(vector<RowNumbers> const& rows, F const& f) {
         for (auto const& r : rows)
             r.foreach(f);
-    }
-    string _repr() const {
-        return make_repr("RowNumbers", {"indices"}, str(*this));
     }
     string _str() const {
         return indices_set_used_ ? "{" + str(isize(indices_)) + " rows}" : str(range_);
@@ -214,7 +228,7 @@ public:
     Metadata(vstr&& columns0, i64 key_len0) : columns_(columns0), key_len_(key_len0) {
         massert2(!columns_.empty());
         table_check(key_len_ <= columns_count(),
-                "key_len " + str(key_len_) + " exceeds header length " + str(columns_count()));
+                "key_len", key_len_, "exceeds header length", columns_count());
     }
     i64 columns_count() const { return isize(columns_); }
     index_t column_id(const cname& name) const { return resolve_column_(name); }
@@ -246,6 +260,7 @@ class InputFrame {
 public:
     InputFrame(std::istream& is) : is_(is) {
     }
+    // todo: rewrite whole read/write part
     Metadata get_metadata() {
         char sep = '\0';
         vstr header;
@@ -330,6 +345,7 @@ public:
     IntRange columns() const { return md_.columns(); }
 private:
     Metadata md_;
+    // todo: rethink column metadata
     vector<IntColumn::ptr> columns_;
 };
 // }}}
@@ -387,42 +403,6 @@ void Table::write(const cnames& names, const vector<RowNumbers>& rows, OutputFra
     });
 }
 // }}}
-// expression bindings {{{
-class ConstBinding {
-public:
-    ConstBinding(value_t value0) : value_(value0) {}
-add_field_with_lvalue_ref_accessor(value_t, value)
-};
-class ColumnBinding {
-public:
-    ColumnBinding(const IntColumn& col, const RowRange& rng) : col_(col), rng_(rng) {}
-    const IntColumn& column() const { return col_; }
-    const RowRange& row_range() const { return rng_; }
-    template <typename T>
-    auto equal_range(const T& value) const {
-        return column().equal_range(row_range(), value);
-    }
-    string _repr() const { return make_repr("ColumnBinding", {"column", "row_range"}, col_, rng_); }
-private:
-    const IntColumn& col_;
-    const RowRange& rng_;
-};
-// }}}
-class PredOp { // {{{
-public:
-    enum Op : char {op_less = '<', op_equal = '=', op_more = '>'};
-    PredOp(const string& op) {
-        if (op == "<") op_ = op_less;
-        else if (op == "=") op_ = op_equal;
-        else if (op == ">") op_ = op_more;
-        else unreachable_assert("unknown operator string in PredOp constructor: " + op);
-    }
-    bool is_single_elem() const { return op_ == op_equal; }
-    string _str() const { return _repr(); }
-    string _repr() const { return string(1, static_cast<char>(op_)); }
-private:
-    Op op_;
-}; // }}}
 class ColumnPredicate { // {{{
 public:
     ColumnPredicate(ColumnHandle h, vector<ValueInterval> intervals)
@@ -543,7 +523,7 @@ public:
         auto s = "TablePredicate(\n"s;
         for (auto const& pred : preds_)
             s += "    " + repr(pred) + "\n";
-        return s;
+        return s + ')';
     }
 private:
     Metadata const& md_;
@@ -578,6 +558,21 @@ public:
     }
 private:
     Table& table_;
+}; // }}}
+class PredOp { // {{{
+public:
+    enum Op : char {op_less = '<', op_equal = '=', op_more = '>'};
+    PredOp(const string& op) {
+        if (op == "<") op_ = op_less;
+        else if (op == "=") op_ = op_equal;
+        else if (op == ">") op_ = op_more;
+        else unreachable_assert("unknown operator string in PredOp constructor: " + op);
+    }
+    bool is_single_elem() const { return op_ == op_equal; }
+    string _str() const { return _repr(); }
+    string _repr() const { return string(1, static_cast<char>(op_)); }
+private:
+    Op op_;
 }; // }}}
 class SingleRangePred { // {{{
 public:
