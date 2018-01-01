@@ -93,6 +93,8 @@ template <class T> auto str(const T& t)
     { return _Str<T>()(t); }
 template <> struct _Str<std::string> { auto operator()(const std::string& t)
     { return t; }};
+template <> struct _Str<std::string_view> { auto operator()(const std::string_view& t)
+    { return std::string(t); }};
 template <class T> struct _Str<T, std::enable_if_t<_is_char_ptr<T>()>> { auto operator()(T const& t)
     { return std::string(t); }};
 template <class T> struct _Str<T, std::enable_if_t<is_ptr<T>::value>> { auto operator()(T const& t)
@@ -119,6 +121,8 @@ template <class T, class = void> struct _Repr { auto operator()(T const& t)
 template <class T> auto repr(const T& t)
     { return _Repr<T>()(t); }
 template <> struct _Repr<std::string> { auto operator()(const std::string& t)
+    { return fun::surround(str(t), '"'); }};
+template <> struct _Repr<std::string_view> { auto operator()(const std::string_view& t)
     { return fun::surround(str(t), '"'); }};
 template <class T> struct _Repr<T, std::enable_if_t<_is_char_ptr<T>()>> { auto operator()(T const& t)
     { return fun::surround(str(t), '"'); }};

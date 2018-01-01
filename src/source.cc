@@ -495,7 +495,7 @@ public:
     std::string _repr() const {
         return make_repr("AfterRangeScan", {"fullscan_requests"}, fullscan_requests_);
     }
-    std::string _str() const { 
+    std::string _str() const {
         return str(fullscan_requests_);
     }
 private:
@@ -590,7 +590,7 @@ public:
             vi64 current_value;
             for (auto const j : table_.key_columns())
                 current_value.push_back(table_.column(j)->at(i));
-            table_check(i == 0 || !vector_less(current_value, prev_value), 
+            table_check(i == 0 || !vector_less(current_value, prev_value),
                 "row " + std::to_string(i) + "'s key is lesser than previous row");
             prev_value = std::move(current_value);
         }
