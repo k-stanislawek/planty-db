@@ -1,6 +1,7 @@
 venv
 .mypy_cache
-build
+build*
+workspace*
 
 # test files
 *.tmp

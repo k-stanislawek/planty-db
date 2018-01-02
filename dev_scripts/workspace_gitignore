@@ -1,3 +1,8 @@
+gentest.*
+diagnostic.log
+user.*
+executable.e
+
 *.cg.log
 *.csv
 *.err
