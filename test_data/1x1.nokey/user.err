@@ -1,0 +1,9 @@
+Metadata(columns=["a"],key_len=0)
+rows: 1 columns: 1
+info: query: select a where a=0
+Query(where_preds=TablePredicate(
+    ColumnPredicate(column=ColumnHandle(column=IntColumn(name="a",length=1)),intervals=[[0..0]])
+),select_cols=[ColumnHandle(column=IntColumn(name="a",length=1))])
+plan: Range scan result: (last_col=0, rows=<0..0>)
+plan: Full scan result: <0..0>
+

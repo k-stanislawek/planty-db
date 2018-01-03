@@ -435,22 +435,26 @@ private:
 using columns_t = vector<ColumnHandle>;
 // after info about key and column order was used
 struct FullscanRequest {
-    FullscanRequest(RowRange range, i64 fcol) : rows(range), last_range_col(fcol) {}
+    FullscanRequest(RowRange range, i64 fcol) : rows(range), first_column(fcol) {}
     FullscanRequest(FullscanRequest const&) = default;
     FullscanRequest(FullscanRequest &&) = default;
     FullscanRequest & operator=(FullscanRequest &&) = default;
     FullscanRequest & operator=(FullscanRequest const&) = default;
     bool operator<(const FullscanRequest& other) const { return rows < other.rows; }
     RowRange rows;
-    i64 last_range_col;
-    string _repr() const { return make_repr("FullscanRequest", {"rows", "last_range_col"}, rows, last_range_col); }
-    string _str() const { return "(last_col=" + str(last_range_col) + ", rows=" + str(rows) + ")"; }
+    i64 first_column;
+    string _repr() const { return make_repr("FullscanRequest", {"rows", "first_column"}, rows, first_column); }
+    string _str() const { return "(last_col=" + str(first_column) + ", rows=" + str(rows) + ")"; }
 };
 class AfterRangeScan {
 public:
-    AfterRangeScan(vector<FullscanRequest> fullscan_requests_0) noexcept
-            : fullscan_requests_(move(fullscan_requests_0)) {
-        fun::sort(fullscan_requests_);
+    AfterRangeScan(vector<FullscanRequest> fullscan_requests_0,
+            vector<RowRange> remaining_rangescan_requests_0,
+            i64 key_len)
+        : fullscan_requests_(fun::sorted(fun::merge(fullscan_requests_0,
+            fun::map(remaining_rangescan_requests_0, [&](auto const& r)
+                { return FullscanRequest{r, key_len}; }))))
+    {
     }
     vector<FullscanRequest> const& fullscan_requests() const noexcept { return fullscan_requests_; }
     string _repr() const {
@@ -477,7 +481,7 @@ class TablePredicate {
 public:
     TablePredicate(Metadata const& md, vector<ColumnPredicate> && preds_0) : md_(md), preds_(preds_0) {}
     AfterRangeScan perform_range_scan(RowRange const& rows) const {
-        vector<FullscanRequest> outp;
+        vector<FullscanRequest> not_scanned;
         vector<RowRange> rows_to_rangescan = {rows};
         vector<RowRange> rows_to_rangescan_rotate = {};
         for (const i64 c : md_.key_columns()) {
@@ -485,18 +489,18 @@ public:
                 break;
             log_plan("Range scan for column:", str(c), "rows:", str(rows_to_rangescan));
             auto& pred = preds_[c];
-            bool const is_last_range_column = (c + 1 == md_.key_len());
             auto result_handler = [&] (RowRange r, ValueInterval const& v) {
-                    if (!is_last_range_column && v.is_single_value())
+                    if (v.is_single_value())
                         rows_to_rangescan_rotate.push_back(r);
                     else
-                        outp.emplace_back(r, c);
+                        not_scanned.emplace_back(r, c + 1);
                 };
             pred.filter(rows_to_rangescan, result_handler);
             std::swap(rows_to_rangescan, rows_to_rangescan_rotate);
             rows_to_rangescan_rotate.clear();
         }
-        return AfterRangeScan(move(outp));
+
+        return AfterRangeScan(move(not_scanned), move(rows_to_rangescan), md_.key_len());
     }
     RowNumbers perform_full_scan(RowRange const& rows, IntRange const& columns) const {
         RowNumbers row_numbers(rows);
@@ -516,7 +520,7 @@ public:
         vector<RowNumbers> outp;
         for (auto const& request : requests)
             outp.push_back(perform_full_scan(request.rows,
-                        IntRange(request.last_range_col + 1, md_.columns_count())));
+                           IntRange(request.first_column, md_.columns_count())));
         return outp;
     }
     string _repr() const {

@@ -1,8 +1,7 @@
 gentest.*
 diagnostic.log
-user.*
 executable.e
-
+diff.*
 *.cg.log
 *.csv
 *.err

@@ -1,0 +1,3 @@
+plan: Range scan for column: 0 rows: <0..0>
+plan: Range scan result: (last_col=1, rows=<0..0>)
+plan: Full scan result: <0..0>

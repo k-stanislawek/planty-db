@@ -1,0 +1,4 @@
+
+query: select a where a=0
+a
+0

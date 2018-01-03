@@ -89,9 +89,9 @@ def call(fun, argnames, args): # {{{
     fun(**kw)
     git_record(s)
 # }}}
-def gentest(testname, lines, queries, times=1): # {{{
+def gentest(testname, lines, queries, times=1, key_len=0): # {{{
     if not testname:
-        testname = "gentest.{}.{}.{}".format(lines, queries, times)
+        testname = "gentest.{}.{}.{}.{}".format(lines, queries, times, key_len)
         if not os.path.isdir(testname):
             os.makedirs(testname)
     csvname = "%s/csv" % testname
@@ -101,7 +101,7 @@ def gentest(testname, lines, queries, times=1): # {{{
     queries = 10**int(queries)
     times = int(times)
     with open(csvname, "w") as f:
-        print("a; 1", file=f)
+        print("a; %d" % key_len, file=f)
         for x in range(lines):
             print(x, file=f)
     with open(inname, "w") as f:
@@ -266,6 +266,8 @@ if __name__ == "__main__":
         parser.add_argument("-l", "--lines", type=int, required=True, help="10**x will be used")
         parser.add_argument("-q", "--queries", type=int, required=True, help="10**x will be used")
         parser.add_argument("-t", "--times", type=int, required=True, help="x will be used")
+        parser.add_argument("-k", "--key-len", type=int, default=0,
+                            help="length of the key; 0 or 1")
         parser = subparsers.add_parser("save")
         parser.add_argument("savename", help="name for a save (git tag)")
         parser = subparsers.add_parser("build")
@@ -289,7 +291,7 @@ if __name__ == "__main__":
             exit(0)
         _configure_logging(logging.getLogger(""))
         if args.subcommand == "gentest":
-            call(gentest, ["lines", "queries", "times", "testname"], args)
+            call(gentest, ["lines", "queries", "times", "testname", "key_len"], args)
         elif args.subcommand == "save":
             call(git_tag, ["savename"], args)
         elif args.subcommand == "copytest":

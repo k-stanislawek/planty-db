@@ -21,9 +21,21 @@ template <class C> i64 isize(C const& c) { return static_cast<i64>(c.size()); }
 template <class T, size_t N> i64 isize(std::array<T, N> const&) { return static_cast<i64>(N); }
 namespace fun {
 /* on ranges */
+
 auto map = [](auto const& c, auto const& f) {
-    std::vector<typename std::decay<decltype(f(*c.begin()))>::type> v;
-    for (auto const& e : c) v.push_back(f(e));
+    std::vector<std::decay_t<decltype(f(*c.begin()))>> v;
+    v.reserve(isize(c));
+    std::transform(c.cbegin(), c.cend(),
+            std::back_inserter(v),
+            f);
+    return v;
+};
+auto merge = [](auto const& range1, auto const& range2) {
+    std::vector<std::decay_t<decltype(*range1.begin())>> v;
+    v.reserve(isize(range1) + isize(range2));
+    std::merge(range1.cbegin(), range1.cend(),
+            range2.cbegin(), range2.cend(),
+            std::back_inserter(v));
     return v;
 };
 auto sort = [](auto & c, auto &&...ts) { std::sort(c.begin(), c.end(), ts...); };
@@ -187,7 +199,6 @@ template <class ...Ts> void dprint(Ts const&...) {}
 template <class ...Ts> void dprintln(Ts const&...) {}
 #endif
 // }}}
-
 // {{{ lexical cast
 std::pair<i64, bool> to_i64(std::string_view strv) {
     std::size_t first_non_converted = 0;
