@@ -1,7 +1,8 @@
 venv
 .mypy_cache
+__pycache__
 build*
-workspace*
+.idea
 
 # test files
 *.tmp

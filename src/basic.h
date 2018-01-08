@@ -21,7 +21,6 @@ template <class C> i64 isize(C const& c) { return static_cast<i64>(c.size()); }
 template <class T, size_t N> i64 isize(std::array<T, N> const&) { return static_cast<i64>(N); }
 namespace fun {
 /* on ranges */
-
 auto map = [](auto const& c, auto const& f) {
     std::vector<std::decay_t<decltype(f(*c.begin()))>> v;
     v.reserve(isize(c));
@@ -50,9 +49,11 @@ template <int n> auto nth = [](auto const& e) { return std::get<n>(e); };
 auto surround = [](auto const& a, char b, char c = '\0') { return b + a + (c ? c : b); };
 auto join = [](auto const& container, auto const& separator, auto const& mapper) {
     std::string s;
-    if (container.empty()) return s;
-    auto it = container.begin(); s += mapper(*it++);
-    for (; it != container.end(); it++) { s += separator; s += mapper(*it++); }
+    for (auto it = container.begin(); it != container.end(); it++) {
+        if (it != container.begin())
+            s += separator;
+        s += mapper(*it);
+    }
     return s;
 };
 } // namespace fun
@@ -167,7 +168,7 @@ std::string make_repr(std::string classname, const std::vector<std::string>& hea
     tuple_foreach([&](auto i, auto const& v) {
         if (i != 0) res += ',';
         res += header[i] + "=" + repr(v);
-    }, std::forward_as_tuple(ts...));
+    }, std::make_tuple(ts...));
     return classname + fun::surround(res, '(', ')');
 }
 /// }}}

@@ -13,6 +13,9 @@ default: debug.e
 debug.e: $(deps)
 	$(CC) $< -o $@ ${FLAGS_DEBUG}
 
+tests.e: tests.cc Makefile $(headers)
+	$(CC) $< -o $@ ${FLAGS_DEBUG}
+
 profiling_clang.e: $(deps)
 	clang++-5.0 $< -o $@ ${FLAGS_PROFILING}
 

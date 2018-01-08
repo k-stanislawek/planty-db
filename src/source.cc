@@ -269,6 +269,7 @@ public:
         while (sep != '\n' && !metadata_found) {
             string s;
             is_ >> s;
+            dprintln("s", s);
             table_check(!is_.eof(), "empty header");
             if (s.back() == ';') {
                 s.pop_back();
@@ -282,6 +283,7 @@ public:
         if (metadata_found)
             is_ >> key_len;
         ++(*this);
+        dprintln("header", header);
         auto m = Metadata(move(header), move(key_len));
         dprintln(repr(m));
         return m;
@@ -505,7 +507,7 @@ public:
     RowNumbers perform_full_scan(RowRange const& rows, IntRange const& columns) const {
         RowNumbers row_numbers(rows);
         {
-            RowNumbersEraser eraser(row_numbers);
+            RowNumbersEraser eraser(row_numbers); // todo: eraser -> builder
             for (auto const i : row_numbers.as_range()) {
                 bool can_stay = true;
                 for (auto const c : columns)
@@ -711,12 +713,11 @@ void main_loop(const CmdArgs& args) {
     i64 count = 0;
     while (std::getline(std::cin, line)) {
         try {
-            println();
             auto q = parse(tbl, line);
-            println("query:", line);
             log_info("query:", line);
             dprintln(repr(q));
             Measure mes(str(++count));
+            println();
             OutputFrame outp(std::cout);
             t.run(q, outp);
             dprintln();

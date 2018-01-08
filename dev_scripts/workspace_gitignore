@@ -1,5 +1,6 @@
 gentest.*
 diagnostic.log
+latest.*
 executable.e
 diff.*
 *.cg.log
