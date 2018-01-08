@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from itertools import product
 import operator
 import random
@@ -50,26 +50,31 @@ def generate_fullscan_case_table_values(n_columns: int, last_value: int, key_len
     return values_list
 
 def write_queries(f, queries):
-    f.writelines(queries)
-    f.write("\n")
+    for q in queries:
+        f.write("%s\n" % q)
 
-def write_output(f, column_names, output):
-    f.write("\n")
-    f.write(" ".join(column_names) + "\n")
-    for t in output:
-        f.write(" ".join(map(str, t)) + "\n")
+def write_output(f, column_names, outputs: List[Union[List[int], List[Tuple[int]]]]):
+    for n, output in enumerate(outputs, start=1):
+        f.write("query number: %d\n" % n)
+        f.write(" ".join(column_names) + "\n")
+        for t in output:
+            if isinstance(t, int):
+                t = [t]
+            f.write(" ".join(map(str, t)) + "\n")
 
 def write_csv(f, column_names: Tuple[str], values: List[Tuple[int]], key_len: int):
     f.write(" ".join(column_names) + "; %d\n" % key_len)
     for v in values:
+        if isinstance(v, int):
+            v = [v]
         f.write(" ".join(map(str, v)) + "\n")
 
-def write_test(testname: Path, column_names: Tuple[str], values: List[Tuple[int]], output: List[Tuple[int]],
-               queries: List[str], key_len: int):
+def write_test(testname: Path, column_names: Tuple[str], values: Union[List[int], List[Tuple[int]]],
+               queries_with_outputs: List[Tuple[str, Union[List[int], List[Tuple[int]]]]], key_len: int):
     with (testname / "in").open("w") as f:
-        write_queries(f, queries)
+        write_queries(f, [q for q, _ in queries_with_outputs])
     with (testname / "out").open("w") as f:
-        write_output(f, column_names, output)
+        write_output(f, column_names, [o for _, o in queries_with_outputs])
     with (testname / "csv").open("w") as f:
         write_csv(f, column_names, values, key_len)
 
@@ -86,4 +91,19 @@ def generate_fullscan_case(testname: Path, n_columns: int, max_value: int, key_l
     output = generate_fullscan_case_output(values_list, where_limits)
     column_names = make_column_names(n_columns)
     query = make_query(column_names, ["(..%d]" % l for l in where_limits])
-    write_test(testname, column_names, values_list, output, [query], key_len)
+    write_test(testname, column_names, values_list, [(query, output)], key_len)
+
+def generate_interval_case(testname: Path, key_len: int):
+    if not testname:
+        testname = Path("interval.%d" % key_len)
+    testname.mkdir(exist_ok=True)
+    values = [x for x in range(10)]
+    qf = "select c where c=%s"
+    queries = [(qf % "[3..)", list(range(3, 10))),
+               (qf % "(..7]", list(range(8))),
+               (qf % "[3..7)", [3, 4, 5, 6]),
+               (qf % "(3..7]", [4, 5, 6, 7]),
+               (qf % "(..)", values),
+               (qf % "[3..3]", [3]),
+               (qf % "[3..3)", [])]
+    write_test(testname, ("c",), values, queries, key_len)

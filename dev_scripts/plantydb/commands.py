@@ -4,8 +4,10 @@ import shutil
 from pathlib import Path
 from typing import List
 
+import os
+
 from plantydb.common import plantydb_root, dev_scripts_root, auto_tests
-from plantydb.generate import generate_fullscan_case
+from plantydb.generate import generate_fullscan_case, generate_interval_case
 from plantydb.perf_commands import accumulate_performance_data, diff_perf_mins
 from plantydb.shcall import shcall
 from plantydb.shops import sh_grep_pref, sh_copy, sh_diff, sh_make, git_record
@@ -55,26 +57,28 @@ def try_find_generator(testname: Path):
     generator_name, *args = testname_normalized.split(".")
     if generator_name == "fullscan" and len(args) == 3:
         return generate_fullscan_case, (testname, int(args[0]), int(args[1]), int(args[2]))
+    if generator_name == "interval" and len(args) == 1:
+        return generate_interval_case, (testname, int(args[0]))
 
 def symlink_latest(testname):
     p = Path("latest")
-    if p.exists():
-       p.unlink()
+    if os.path.islink("latest"):
+        p.unlink()
     p.symlink_to(testname)
 
 def run_tests(testnames: List[Path], apply=False):
     if not testnames:
         testnames = list(map(Path, auto_tests()))
+    symlink_latest(testnames[0])
     for t in testnames:
+        g = try_find_generator(t)
+        if g:
+            f, a = g
+            logging.info("generating %s%s", f.__name__, a)
+            f(*a)
         if not t.is_dir():
-            g = try_find_generator(t)
-            if g:
-                f, a = g
-                logging.info("generating %s%s", f.__name__, a)
-                f(*a)
-            else:
-                logging.error("No dir %s", t)
-                continue
+            logging.error("No dir %s", t)
+            continue
         run_test(t, apply=apply)
 
 def build(target):

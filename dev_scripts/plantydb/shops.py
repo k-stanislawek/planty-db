@@ -23,7 +23,8 @@ def git_get_commit(cwd=Path(".")):
 
 
 def sh_make(make_target_name, source_dir, final_target_path, compiler_output_log: Path):
-    completed = shcall("make {} 2>&1 | tee {}".format(make_target_name, compiler_output_log.absolute()),
+    completed = shcall("make {} 2>&1 | tee {}".format(make_target_name,
+                                                      compiler_output_log.absolute()),
                        check=False, cwd=source_dir, info_lines=10)
     if completed.returncode == 0:
         sh_copy(source_dir / make_target_name, final_target_path)

@@ -714,10 +714,10 @@ void main_loop(const CmdArgs& args) {
     while (std::getline(std::cin, line)) {
         try {
             auto q = parse(tbl, line);
+            Measure mes(str(++count));
             log_info("query:", line);
             dprintln(repr(q));
-            Measure mes(str(++count));
-            println();
+            println("query number:", count);
             OutputFrame outp(std::cout);
             t.run(q, outp);
             dprintln();
