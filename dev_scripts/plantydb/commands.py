@@ -47,9 +47,7 @@ def run_test(testname: Path, apply=False):
         if apply:
             sh_copy(userpath, testpath)
         elif family in checked:
-            if not testpath.exists():
-                logging.info("skipping .%s because reference file does not exist", family)
-            else:
+            if testpath.exists():
                 logging.info("comparing .%s", family)
                 sh_diff(testpath, userpath, diffpath)
 
