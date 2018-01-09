@@ -1,5 +1,6 @@
 import logging
 import shutil
+from itertools import repeat, product
 
 from pathlib import Path
 from typing import List
@@ -7,7 +8,7 @@ from typing import List
 import os
 
 from plantydb.common import plantydb_root, dev_scripts_root, auto_tests
-from plantydb.generate import generate_fullscan_case, generate_interval_case
+from plantydb.generate import generate_fullscan_case, generate_interval_case, generate_multicolumn_case
 from plantydb.perf_commands import accumulate_performance_data, diff_perf_mins
 from plantydb.shcall import shcall
 from plantydb.shops import sh_grep_pref, sh_copy, sh_diff, sh_make, git_record
@@ -52,6 +53,12 @@ def run_test(testname: Path, apply=False):
                 logging.info("comparing .%s", family)
                 sh_diff(testpath, userpath, diffpath)
 
+def readlist(s):
+    return list(map(int, s.split("-")))
+
+def writelist(l):
+    return "-".join(map(str, l))
+
 def try_find_generator(testname: Path):
     testname_normalized = testname.parts[-1]
     generator_name, *args = testname_normalized.split(".")
@@ -59,6 +66,8 @@ def try_find_generator(testname: Path):
         return generate_fullscan_case, (testname, int(args[0]), int(args[1]), int(args[2]))
     if generator_name == "interval" and len(args) == 1:
         return generate_interval_case, (testname, int(args[0]))
+    if generator_name == "multi" and len(args) == 3:
+        return generate_multicolumn_case, (testname, readlist(args[0]), readlist(args[1]), int(args[2]))
 
 def symlink_latest(testname):
     p = Path("latest")
@@ -80,6 +89,17 @@ def run_tests(testnames: List[Path], apply=False):
             logging.error("No dir %s", t)
             continue
         run_test(t, apply=apply)
+
+def run_multi_tests():
+    fs = "multi.%s.%s.%d"
+    tests = []
+    for n in range(1, 5):
+        for k in range(0, n + 1):
+            args = list(product(*repeat([0, 1], n)))
+            for arg1 in args:
+                arg2 = [1 - a for a in arg1]
+                tests.append(Path(fs % (writelist(arg1), writelist(arg2), k)))
+    run_tests(tests)
 
 def build(target):
     sh_make(target, plantydb_root() / "src", "executable.e", Path("compilation.log"))

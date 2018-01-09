@@ -4,7 +4,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from plantydb.commands import run_perf, run_cg, run_tests, build, new
+from plantydb.commands import run_perf, run_cg, run_tests, build, new, run_multi_tests
 from plantydb.common import configure_logging, call
 from plantydb.generate import generate_fullscan_case
 from plantydb.perf_commands import gentest
@@ -48,6 +48,8 @@ if __name__ == "__main__":
         parser.add_argument("testnames", nargs="*", type=Path)
         parser.add_argument("-a", "--apply", action="store_true")
 
+        parser = subparsers.add_parser("run_multi_tests")
+
         parser = subparsers.add_parser("gen_fullscan")
         parser.add_argument("--testname", type=Path)
         parser.add_argument("-c", "--n-columns", type=int, required=True)
@@ -72,6 +74,8 @@ if __name__ == "__main__":
             call(run_cg, None, args)
         elif args.subcommand == "run_tests":
             call(run_tests, None, args)
+        elif args.subcommand == "run_multi_tests":
+            call(run_multi_tests, None, args)
         elif args.subcommand == "gen_fullscan":
             call(generate_fullscan_case, None, args)
         else:

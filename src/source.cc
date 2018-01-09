@@ -446,7 +446,7 @@ struct FullscanRequest {
     RowRange rows;
     i64 first_column;
     string _repr() const { return make_repr("FullscanRequest", {"rows", "first_column"}, rows, first_column); }
-    string _str() const { return "(last_col=" + str(first_column) + ", rows=" + str(rows) + ")"; }
+    string _str() const { return "(first_remaining_column=" + str(first_column) + ", rows=" + str(rows) + ")"; }
 };
 class AfterRangeScan {
 public:
