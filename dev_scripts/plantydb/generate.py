@@ -97,13 +97,19 @@ def generate_interval_case(testname: Path, key_len: int):
     if not testname:
         testname = Path("interval.%d" % key_len)
     testname.mkdir(exist_ok=True)
-    values = [x for x in range(10)]
+    values = [x for x in range(2, 10)]
     qf = "select c where c=%s"
     queries = [(qf % "[3..)", list(range(3, 10))),
-               (qf % "(..7]", list(range(8))),
+               (qf % "(..7]", list(range(2, 8))),
                (qf % "[3..7)", [3, 4, 5, 6]),
                (qf % "(3..7]", [4, 5, 6, 7]),
                (qf % "(..)", values),
                (qf % "[3..3]", [3]),
-               (qf % "[3..3)", [])]
+               (qf % "[3..3)", []),
+               # over edges
+               (qf % "[1..11]", values),
+               (qf % "[..11]", values),
+               (qf % "[1..]", values),
+               (qf % "[1..5]", [2, 3, 4, 5]),
+               (qf % "[7..11]", [7, 8, 9])]
     write_test(testname, ("c",), values, queries, key_len)
