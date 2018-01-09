@@ -112,7 +112,42 @@ public:
         return bracket1 + value1 + ".." + value2 + bracket2;
     }
     string _str() const { return _repr(); }
+
+    auto get_key() const
+        { return std::make_tuple(l_helper_(), l_open_, r_helper_(), !r_open_); }
+    friend bool operator<(ValueInterval const& a, ValueInterval const& b)
+        { return a.get_key() < b.get_key(); }
+
+    bool neighbors_right(const ValueInterval& other) const {
+        massert2(get_key() <= other.get_key());
+        if (r_helper_() != other.l_helper_())
+            return r_helper_() > other.l_helper_();
+        return !r_open_ || !other.l_open_;
+    }
+    void merge_right(const ValueInterval& other) {
+        massert2(neighbors_right(other));
+        if (r_helper_() > other.r_helper_())
+            return;
+        if (r_helper_() == other.r_helper_()) {
+            r_open_ = std::min(r_open_, other.r_open_);
+        } else {
+            r_open_ = other.r_open_;
+            r_ = other.r_;
+            r_infinity_ = other.r_infinity_;
+        }
+    }
+
 private:
+    value_t l_helper_() const {
+        if (l_infinity_)
+            return std::numeric_limits<value_t>::min();
+        return l_;
+    }
+    value_t r_helper_() const {
+        if (r_infinity_)
+            return std::numeric_limits<value_t>::max();
+        return r_;
+    }
     value_t l_, r_;
     bool l_open_, r_open_, l_infinity_, r_infinity_;
 }; // }}}
@@ -606,11 +641,19 @@ public:
         return ColumnPredicate(ColumnHandle(tbl, column_id_), move(intervals));
     }
     static vector<ValueInterval> organize(vector<SingleRangePred> single_preds) {
-        if (single_preds.empty())
-            return {};
-        massert2(single_preds.size() == 1);
         massert2(single_preds.front().op().is_single_elem());
-        return {ValueInterval(single_preds.front().value())};
+        fun::sort(single_preds, [](auto const& left, auto const& right)
+                { return left.value() < right.value(); });
+        vector<ValueInterval> res;
+        for (auto const& pred : single_preds) {
+            auto const& interval = pred.value();
+            if (!res.empty() && res.back().neighbors_right(interval))
+                res.back().merge_right(interval);
+            else
+                res.push_back(interval);
+        }
+        dprintln(res);
+        return res;
     }
 private:
     Metadata const& md_;

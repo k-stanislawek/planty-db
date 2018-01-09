@@ -185,11 +185,6 @@ def generate_interval_case(testname: Path, key_len: int):
                (qf % "[7..11]", [7, 8, 9])]
     write_test(testname, ("c",), values, queries, key_len)
 
-
-
-
-
-
 def generate_multicolumn_case(testname: Path,
                               exact_ranges: List[int],
                               nonexact_ranges: List[int],
@@ -207,8 +202,9 @@ def generate_multicolumn_case(testname: Path,
         output_exact = list(range(0, exact * 2, 2))
         intervals_exact = ["[{0}..{0}]".format(v)
                            for v in output_exact]
-        output_nonexact = [v + i for i in range(2)
-                           for v in range(exact * 2, exact * 2 + nonexact * 3, 3)]
+        output_nonexact = [v + i
+                           for v in range(exact * 2, exact * 2 + nonexact * 3, 3)
+                           for i in range(2)]
         intervals_nonexact = ["[{0}..{1}]".format(v, v + 1)
                               for v in range(exact * 2, exact * 2 + nonexact * 3, 3)]
         column_output.append(output_exact + output_nonexact)

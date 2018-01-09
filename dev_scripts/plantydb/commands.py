@@ -7,6 +7,7 @@ from typing import List
 
 import os
 
+from plantydb import generate
 from plantydb.common import plantydb_root, dev_scripts_root, auto_tests
 from plantydb.generate import generate_fullscan_case, generate_interval_case, generate_multicolumn_case
 from plantydb.perf_commands import accumulate_performance_data, diff_perf_mins
@@ -92,11 +93,20 @@ def run_multi_tests():
     fs = "multi.%s.%s.%d"
     tests = []
     for n in range(1, 5):
-        for k in range(0, n + 1):
+        for k in range(n // 2, (n + 1) // 2 + 1):
             args = list(product(*repeat([0, 1], n)))
             for arg1 in args:
                 arg2 = [1 - a for a in arg1]
                 tests.append(Path(fs % (writelist(arg1), writelist(arg2), k)))
+    for p in range(2, 4):
+        args = list(product(range(p - 2, 3), range(p - 2, 3)))
+        for arg1 in args:
+            arg2 = [p - a for a in arg1]
+            tests.append(Path(fs % (writelist(arg1), writelist(arg2), k)))
+
+    for known_test in generate.known_plans:
+        tests.append(Path(known_test))
+
     run_tests(tests)
 
 def build(target):
