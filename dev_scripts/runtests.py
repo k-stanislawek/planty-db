@@ -341,4 +341,4 @@ def test_syntax_errors(tmpdir, plantydb):
            [l.rstrip() for l in read_out(tmpdir)]
 
 if __name__ == "__main__":
-    exit(pytest.main([sys.argv[0]]))
+    exit(pytest.main(sys.argv))
