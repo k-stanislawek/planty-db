@@ -1,4 +1,5 @@
 import logging
+from collections import namedtuple
 from typing import List, Tuple, Union, Sequence
 from itertools import product, zip_longest
 import operator
@@ -98,15 +99,15 @@ class PlanFile:
         self._lines1.append(self._range_scan.format(c=c, l=l, r=r))
         return self
 
-    def fullscan(self, c, l, r):
+    def rangescan_result(self, c, l, r):
         self._lines2.append(self._full_scan.format(c=c, l=l, r=r))
         return self
 
-    def res1(self, l, r):
+    def fullscan_result_range(self, l, r):
         self._lines3.append(self._res1.format(l=l, r=r))
         return self
 
-    def res2(self, n):
+    def fullscan_result_rows(self, n):
         self._lines3.append(self._res2.format(n=n))
         return self
 
@@ -125,15 +126,14 @@ known_plans = {
     # edge case when all columns are range-scanned
     # note: last column predicate can be non-exact
     "multi.1-0.0-1.2": PlanFile().rangescan(0, 0, 19).rangescan(1, 0, 4)
-                                 .fullscan(2, 0, 1).res1(0, 1),
+                                 .rangescan_result(2, 0, 1).fullscan_result_range(0, 1),
     # column fullscaned because of non-exact predicate
-    "multi.0-1.1-0.2": PlanFile().rangescan(0, 0, 19).fullscan(1, 0, 7).res2(2),
+    "multi.0-1.1-0.2": PlanFile().rangescan(0, 0, 19).rangescan_result(1, 0, 7).fullscan_result_rows(2),
     # column fullscaned because of being non-key column
-    "multi.1-0.0-1.1": PlanFile().rangescan(0, 0, 19).fullscan(1, 0, 4).res2(2),
+    "multi.1-0.0-1.1": PlanFile().rangescan(0, 0, 19).rangescan_result(1, 0, 4).fullscan_result_rows(2),
     # 100% full-scan because of no key
-    "multi.1-1.0-0.0": PlanFile().fullscan(0, 0, 15).res2(1),
+    "multi.1-1.0-0.0": PlanFile().rangescan_result(0, 0, 15).fullscan_result_rows(1),
 }
-
 
 def write_test(testname: Path, column_names: Sequence[str], values: Union[List[int], List[Tuple[int]]],
                queries_with_outputs: List[Tuple[str, Union[List[int], List[Tuple[int]]]]], key_len: int):
@@ -145,6 +145,15 @@ def write_test(testname: Path, column_names: Sequence[str], values: Union[List[i
         write_csv(f, column_names, values, key_len)
     if str(testname) in known_plans:
         known_plans[str(testname)].write(testname / "plan")
+
+
+def prepare_interval_pair_test(testdir: Path, test_def):
+    intervals = test_def[0]
+    assert len(intervals) == 2
+    result = test_def[1]
+    name = test_def[2]
+    reversed_too = len(test_def) > 3 and test_def[3] == "reversed_too"
+    
 
 
 def gen_fullscan_testname(*args):
@@ -165,24 +174,30 @@ def generate_fullscan_case(testname: Path, n_columns: int, max_value: int, key_l
 
 
 def generate_interval_case(testname: Path, key_len: int):
+    # test name: interval_types
+    # later: split into several test cases, one per interval, and name them separately
+
     if not testname:
         testname = Path("interval.%d" % key_len)
     testname.mkdir(exist_ok=True)
     values = [x for x in range(2, 10)]
     qf = "select c where c=%s"
-    queries = [(qf % "[3..)", list(range(3, 10))),
-               (qf % "(..7]", list(range(2, 8))),
-               (qf % "[3..7)", [3, 4, 5, 6]),
-               (qf % "(3..7]", [4, 5, 6, 7]),
-               (qf % "(..)", values),
-               (qf % "[3..3]", [3]),
-               (qf % "[3..3)", []),
-               # over edges
-               (qf % "[1..11]", values),
-               (qf % "[..11]", values),
-               (qf % "[1..]", values),
-               (qf % "[1..5]", [2, 3, 4, 5]),
-               (qf % "[7..11]", [7, 8, 9])]
+    queries = [(qf % "[3..)", list(range(3, 10))),  # left closed, right unlimited
+               (qf % "(..7]", list(range(2, 8))),   # left unlimited, right closed
+               (qf % "[3..7)", [3, 4, 5, 6]),       # left closed, right closed
+               (qf % "(3..7]", [4, 5, 6, 7]),       # ...
+               (qf % "(..)", values),               # unlimited
+               (qf % "[3..3]", [3]),                # exact (test also =3)
+               (qf % "[3..3)", []),                 # empty
+               # interval value tests:
+               (qf % "[1..11]", values),            # over both edges
+               (qf % "[..11]", values),             # over right edge and unlimited from left
+               (qf % "[1..]", values),              # over left [...]
+               (qf % "[1..5]", [2, 3, 4, 5]),       # over left only
+               (qf % "[7..11]", [7, 8, 9])]         # over right only
+    # unlimited from both
+    # empty (some silly interval)
+
     write_test(testname, ("c",), values, queries, key_len)
 
 def generate_multicolumn_case(testname: Path,

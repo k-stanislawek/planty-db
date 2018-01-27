@@ -35,8 +35,7 @@ def sh_grep_pref(sign, inp, outp, append=False):
            check=False, log_rc=False, info_lines=0)
 
 
-def sh_diff(reference_file, user_file, outp, append=False):
-    return shcall("diff {0} {1} | tee{3} {2}"
-                  .format(reference_file, user_file, outp, " -a" if append else ""),
-                  check=False, log_rc=False, info_lines=10) \
+def sh_diff(reference_file, user_file, outp, quiet=False):
+    return shcall("diff {0} {1} | tee {2}".format(reference_file, user_file, outp),
+                  check=False, log_rc=False, info_lines=10 if not quiet else 0) \
                .returncode == 0

@@ -34,23 +34,24 @@ def run_cg(testname: Path, cg_args):
     shcall(" ".join([full_cg_args, executable_cmd]).format(testname=testname, cg_args=cg_args),
            info_lines=10)
 
-families = ["info", "plan", "debug", "perf", "query"]
+families_from_stderr = ["info", "plan", "debug", "perf", "query"]
+families = families_from_stderr + ["out"]
+families_checked = ["plan", "out"]
 
-def run_test(testname: Path, apply=False):
+def run_test(testname: Path, automated_tests_mode=False):
     shcall(executable_cmd.format(testname=testname), info_lines=10)
-    for family in families:
+    for family in families_from_stderr:
         sh_grep_pref(family, inp=testname / "user.err", outp=testname / ("user.%s" % family))
-    checked = ["plan", "out"]
-    for family in families + ["out"]:
+    for family in families:
         userpath = testname / ("user.%s" % family)
         diffpath = testname / ("diff.%s" % family)
-        testpath = testname / family
-        if apply:
-            sh_copy(userpath, testpath)
-        elif family in checked:
-            if testpath.exists():
+        expectedpath = testname / family
+        if expectedpath.exists():
+            sh_diff(expectedpath, userpath, diffpath, quiet=automated_tests_mode)
+            if family in families_checked:
                 logging.info("comparing .%s", family)
-                sh_diff(testpath, userpath, diffpath)
+
+
 
 def readlist(s):
     return list(map(int, s.split("-")))
@@ -74,7 +75,7 @@ def symlink_latest(testname):
         p.unlink()
     p.symlink_to(testname)
 
-def run_tests(testnames: List[Path], apply=False):
+def run_tests(testnames: List[Path], automated_tests_mode=False):
     if not testnames:
         testnames = list(map(Path, auto_tests()))
     symlink_latest(testnames[0])
@@ -87,7 +88,7 @@ def run_tests(testnames: List[Path], apply=False):
         if not t.is_dir():
             logging.error("No dir %s", t)
             continue
-        run_test(t, apply=apply)
+        run_test(t, automated_tests_mode=automated_tests_mode)
 
 def run_multi_tests():
     fs = "multi.%s.%s.%d"

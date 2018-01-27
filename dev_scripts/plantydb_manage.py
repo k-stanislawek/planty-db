@@ -48,7 +48,7 @@ if __name__ == "__main__":
         parser.add_argument("testnames", nargs="*", type=Path)
         parser.add_argument("-a", "--apply", action="store_true")
 
-        parser = subparsers.add_parser("run_multi_tests")
+        _ = subparsers.add_parser("run_multi_tests")
 
         parser = subparsers.add_parser("gen_fullscan")
         parser.add_argument("--testname", type=Path)
