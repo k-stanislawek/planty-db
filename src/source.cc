@@ -38,7 +38,8 @@ public:
     RowRange & operator=(RowRange const&) = default;
     RowRange & operator=(RowRange &&) = default;
     RowRange(RowRange &&) = default;
-    RowRange(index_t l0, index_t r0) : l_(l0), r_(r0) {}
+    RowRange(index_t l0, index_t r0) : l_(l0), r_(r0) { normalize(); }
+    static RowRange make_empty() noexcept { return RowRange(1, 0); }
     bool operator==(const RowRange& other) const { return l_ == other.l_ && r_ == other.r_; }
     bool operator<(const RowRange& other) const { return l_ != other.l_ ? l_ < other.l_ : r_ < other.r_; }
     index_t l() const { return l_; }
@@ -46,10 +47,11 @@ public:
     index_t r() const { return r_; }
     index_t& r() { return r_; }
     index_t len() const { return r_ - l_ + 1; }
+    bool empty() const { return l_ > r_; }
     void normalize() { l_ = std::min(l_, r_ + 1); }
     auto begin() const { return iterator(l_); }
     auto end() const { return iterator(r_ + 1); }
-    string _str() const { return "<" + str(l_) + ".." + str(r_) + ">"; }
+    string _str() const { return empty() ? string("<>") : ("<" + str(l_) + ".." + str(r_) + ">"); }
     string _repr() const { return make_repr("RowRange", {"l", "r"}, l_, r_); }
 private:
     index_t l_, r_;
@@ -89,7 +91,21 @@ public:
     }
     ValueInterval(value_t l0, value_t r0, bool l_open0 = false, bool r_open0 = false,
         bool l_infinity0 = false, bool r_infinity0 = false) noexcept : l_(l0), r_(r0), l_open_(l_open0),
-            r_open_(r_open0), l_infinity_(l_infinity0), r_infinity_(r_infinity0) {}
+            r_open_(r_open0), l_infinity_(l_infinity0), r_infinity_(r_infinity0) {
+        normalize_();
+    }
+    void normalize_() noexcept {
+        if (l_infinity() || r_infinity())
+            return;
+        if (l() < r())
+            return;
+        if (l() == r() && !l_open() && !r_open())
+            return;
+        r_ = l() - 1;
+        r_open_ = true;
+        l_open_ = false;
+    }
+    bool empty() const noexcept { return !l_infinity() && !r_infinity() && r() < l(); }
     value_t const& l() const noexcept { return l_; }
     value_t const& r() const noexcept { return r_; }
     bool l_open() const noexcept { return l_open_; }
@@ -185,6 +201,8 @@ public:
         //     narrow();
         //     i64 first_index_behind()
         //         return index_ + (side_.left() ? -1 : 1);
+        if (val.empty())
+            return RowRange::make_empty();
         auto l = rng.l();
         if (!val.l_infinity()) {
             auto const l_rng = equal_range(rng, val.l());
@@ -641,7 +659,6 @@ public:
         return ColumnPredicate(ColumnHandle(tbl, column_id_), move(intervals));
     }
     static vector<ValueInterval> organize(vector<SingleRangePred> single_preds) {
-        massert2(single_preds.front().op().is_single_elem());
         fun::sort(single_preds, [](auto const& left, auto const& right)
                 { return left.value() < right.value(); });
         vector<ValueInterval> res;
@@ -766,7 +783,7 @@ void main_loop(const CmdArgs& args) {
             dprintln();
         } catch (const data_error& e) {
             dprintln();
-            println("query error:", e.what());
+            println("query error:", std::string(e.what()));
         }
     }
 }
