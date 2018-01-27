@@ -156,7 +156,7 @@ def test_extract_results():
 # noinspection PyShadowingNames
 def call_planty_db(tmpdir):
     return subprocess.run("/home/ks/a/planty-db/src/debug.e {csv} < {inp} 1> {out} 2> {err}".format(
-        csv=tmpdir / "csv", inp=tmpdir / "in", out=tmpdir / "out", err=tmpdir / "err"), shell=True)\
+        csv=tmpdir / "csv", inp=tmpdir / "in", out=tmpdir / "out", err=tmpdir / "err"), shell=True) \
         .returncode
 
 
@@ -174,6 +174,7 @@ def test_interval_pair(tmpdir, test_input, key_len, intervals_reversed):
     assert rc == 0
     assert [(["c"], [[r] for r in results])] == extract_results(read_out(tmpdir))
 
+
 @pytest.mark.parametrize("test_input,key_len",
                          product(
                              test_sets.interval_singles + test_sets.intervals_in_relation_to_data,
@@ -188,6 +189,7 @@ def test_interval_single(tmpdir, test_input, key_len):
     assert rc == 0
     assert [(["c"], [[r] for r in results])] == extract_results(read_out(tmpdir))
 
+
 @pytest.mark.parametrize("case", test_sets.plan_tests)
 def test_plan(tmpdir, case: test_sets.case):
     cols = ["c%d" % c for c in range(case.columns_count)]
@@ -198,6 +200,7 @@ def test_plan(tmpdir, case: test_sets.case):
 
     assert rc == 0
     assert [case.result.fullscan_column] == extract_first_remaining_column(read_err(tmpdir))
+
 
 @pytest.mark.parametrize("case", test_sets.OutputOrderingTests.cases)
 def test_output_ordering(tmpdir, case: test_sets.OutputOrderingTests.case):
@@ -210,16 +213,6 @@ def test_output_ordering(tmpdir, case: test_sets.OutputOrderingTests.case):
     assert rc == 0
     assert [(cols, [list(x) for x in case.result])] == extract_results(read_out(tmpdir))
 
-@pytest.mark.parametrize("key_len", [0, 1])
-def test_empty_csv(tmpdir, key_len):
-    cols = ["c0", "c1"]
-    write_csv(tmpdir, make_csv(cols, [], key_len))
-    write_queries(tmpdir, [make_query(cols, [["0", "[1..)"], ["(..1]", "2"]])])
-
-    rc = call_planty_db(tmpdir)
-
-    assert rc == 0
-    assert [(cols, [])] == extract_results(read_out(tmpdir))
 
 @pytest.mark.parametrize("key_len", [0, 1])
 def test_empty_csv(tmpdir, key_len):
@@ -231,6 +224,19 @@ def test_empty_csv(tmpdir, key_len):
 
     assert rc == 0
     assert [(cols, [])] == extract_results(read_out(tmpdir))
+
+
+@pytest.mark.parametrize("key_len", [0, 1])
+def test_empty_csv(tmpdir, key_len):
+    cols = ["c0", "c1"]
+    write_csv(tmpdir, make_csv(cols, [], key_len))
+    write_queries(tmpdir, [make_query(cols, [["0", "[1..)"], ["(..1]", "2"]])])
+
+    rc = call_planty_db(tmpdir)
+
+    assert rc == 0
+    assert [(cols, [])] == extract_results(read_out(tmpdir))
+
 
 def test_no_where(tmpdir):
     cols = ["a"]
@@ -241,6 +247,7 @@ def test_no_where(tmpdir):
 
     assert rc == 0
     assert [(cols, [[1]])] == extract_results(read_out(tmpdir))
+
 
 def test_select(tmpdir):
     cols = ["a", "b", "c"]
@@ -261,6 +268,7 @@ def test_select(tmpdir):
             (["a", "b", "c", "a"], [[1, 2, 3, 1]])
             ] == extract_results(read_out(tmpdir))
 
+
 def test_wrong_column(tmpdir):
     cols = ["a"]
     write_csv(tmpdir, make_csv(cols, [], 0))
@@ -271,3 +279,62 @@ def test_wrong_column(tmpdir):
     assert rc == 0
     assert ["query error: unknown column name: s"] == [l.rstrip() for l in read_out(tmpdir)]
 
+
+def test_unsorted_key_column(tmpdir):
+    cols = ["a", "b"]
+    write_csv(tmpdir, make_csv(cols, [[1, 2], [1, 1]], 2))
+    write_queries(tmpdir, [])
+
+    rc = call_planty_db(tmpdir)
+
+    assert rc == 26
+    assert ["table error: key of row 1 is lesser than previous row"] == \
+           [l.rstrip() for l in read_out(tmpdir)]
+
+
+def test_syntax_errors(tmpdir):
+    cols = ["a", "b"]
+    write_csv(tmpdir, make_csv(cols, [[1, 2]], 2))
+    write_queries(tmpdir, [
+        "",
+        "select a, where b=1",
+        "select a,",
+        "select a b where a=1",
+        "select a b",
+        "select where a=1",
+        "select",
+        "select a where a=1,",
+        "select a where a=1 b=1",
+        "select a where",
+        "select a where a=",
+        "select a where a=b",
+        "select a where =[..1)",
+        "select a where a=[1..1",
+        "select a where a=1..1]",
+        "select a where a=[1-1]",
+        "select a where a=[a..2]",
+        "select   a     where        a=1     "
+    ])
+
+    rc = call_planty_db(tmpdir)
+
+    assert rc == 0
+    assert ['query error: no select at the beginning',
+            'query error: unknown column name: where',
+            'query error: no comma after select list',
+            "query error: something else than 'where' after select list: b",
+            "query error: something else than 'where' after select list: b",
+            'query error: unknown column name: where',
+            'query error: select list empty',
+            'query error: no comma after where list',
+            "query error: there's something after 'where': b=1",
+            'query error: where list empty',
+            'query error: Error during converting to integer:',
+            'query error: Error during converting to integer: b',
+            'query error: unknown column name:',
+            'query error: bad range close:  [1..1',
+            'query error: bad range open:  1..1]',
+            'query error: Error during converting to integer: [1-1]',
+            'query error: Error during converting to integer: a',
+            'query number: 1', 'a', '1'] == \
+           [l.rstrip() for l in read_out(tmpdir)]

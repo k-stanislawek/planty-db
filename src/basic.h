@@ -203,7 +203,13 @@ template <class ...Ts> void dprintln(Ts const&...) {}
 // {{{ lexical cast
 std::pair<i64, bool> to_i64(std::string_view strv) {
     std::size_t first_non_converted = 0;
-    i64 const res = std::stoll(std::string(strv), &first_non_converted);
-    return {res, first_non_converted == strv.size()};
+    try {
+        i64 const res = std::stoll(std::string(strv), &first_non_converted);
+        return {res, first_non_converted == strv.size()};
+    } catch (std::out_of_range const& exc) {
+        return {0, false};
+    } catch (std::invalid_argument const& exc) {
+        return {0, false};
+    }
 }
 // }}}

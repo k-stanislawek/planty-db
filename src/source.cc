@@ -750,6 +750,7 @@ Query parse(const Table& tbl, const string line) {
         query_format_check(where_non_empty, "where list empty");
         query_format_check(!no_comma, "no comma after where list");
     }
+    ss >> std::ws;
     if (ss.eof()) {
         return Query{where_builder.build(tbl), move(select_builder)};
     }
@@ -768,7 +769,12 @@ void main_loop(const CmdArgs& args) {
     auto tbl = Table::read(file);
     TablePlayground t(tbl);
 #ifndef NO_VALIDATION
-    t.validate();
+    try {
+        t.validate();
+    } catch (table_error const& exc) {
+        println("table error:", std::string(exc.what()));
+        exit(26);
+    }
 #endif
     string line;
     i64 count = 0;
