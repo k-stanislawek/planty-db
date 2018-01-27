@@ -209,3 +209,65 @@ def test_output_ordering(tmpdir, case: test_sets.OutputOrderingTests.case):
 
     assert rc == 0
     assert [(cols, [list(x) for x in case.result])] == extract_results(read_out(tmpdir))
+
+@pytest.mark.parametrize("key_len", [0, 1])
+def test_empty_csv(tmpdir, key_len):
+    cols = ["c0", "c1"]
+    write_csv(tmpdir, make_csv(cols, [], key_len))
+    write_queries(tmpdir, [make_query(cols, [["0", "[1..)"], ["(..1]", "2"]])])
+
+    rc = call_planty_db(tmpdir)
+
+    assert rc == 0
+    assert [(cols, [])] == extract_results(read_out(tmpdir))
+
+@pytest.mark.parametrize("key_len", [0, 1])
+def test_empty_csv(tmpdir, key_len):
+    cols = ["c0", "c1"]
+    write_csv(tmpdir, make_csv(cols, [], key_len))
+    write_queries(tmpdir, [make_query(cols, [["0", "[1..)"], ["(..1]", "2"]])])
+
+    rc = call_planty_db(tmpdir)
+
+    assert rc == 0
+    assert [(cols, [])] == extract_results(read_out(tmpdir))
+
+def test_no_where(tmpdir):
+    cols = ["a"]
+    write_csv(tmpdir, make_csv(cols, [[1]], 0))
+    write_queries(tmpdir, ["select a"])
+
+    rc = call_planty_db(tmpdir)
+
+    assert rc == 0
+    assert [(cols, [[1]])] == extract_results(read_out(tmpdir))
+
+def test_select(tmpdir):
+    cols = ["a", "b", "c"]
+    write_csv(tmpdir, make_csv(cols, [[1, 2, 3]], 0))
+    write_queries(tmpdir, [
+        "select a",
+        "select b, a",
+        "select *",
+        "select *, a"
+    ])
+
+    rc = call_planty_db(tmpdir)
+
+    assert rc == 0
+    assert [(["a"], [[1]]),
+            (["b", "a"], [[2, 1]]),
+            (["a", "b", "c"], [[1, 2, 3]]),
+            (["a", "b", "c", "a"], [[1, 2, 3, 1]])
+            ] == extract_results(read_out(tmpdir))
+
+def test_wrong_column(tmpdir):
+    cols = ["a"]
+    write_csv(tmpdir, make_csv(cols, [], 0))
+    write_queries(tmpdir, [make_query("select b", [])])
+
+    rc = call_planty_db(tmpdir)
+
+    assert rc == 0
+    assert ["query error: unknown column name: s"] == [l.rstrip() for l in read_out(tmpdir)]
+
