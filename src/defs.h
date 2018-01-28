@@ -14,13 +14,21 @@ using std::string;
 using std::string_view;
 using std::move;
 
+#ifdef INFO_PRINTS
 auto log_info = [](auto const& ...ts) { lprintln("info:", ts...); };
+#else
+#define log_info(...)
+#endif
+#ifdef PLAN_PRINTS
 auto log_plan = [](auto const& ...ts) { lprintln("plan:", ts...); };
+#else
+#define log_plan(...)
+#endif
 auto log_debug = [](auto const& ...ts) { lprintln("debug:", ts...); };
 #ifdef PERF_PRINTS
 auto log_perf = [](auto const& ...ts) { lprintln("perf:", ts...); };
 #else
-auto log_perf = [](auto const& ...) { };
+#define log_perf(...)
 #endif
 
 #define bound_assert(INDEX, CONTAINER) massert(INDEX >= 0 && INDEX < isize(CONTAINER), \

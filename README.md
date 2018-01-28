@@ -10,12 +10,9 @@ During program run, data is stored 100% in RAM and is read-only.
 
 ## What kind of queries?
 
-Short answer:
 - Selecting columns in CSV-like file (with integer numbers)
 - Filtering column values with `<`, `=` or `>` predicates (e.g. `year > 1980`)
 - Most logical relations between predicates can be expressed, e.g. `income < 500 and (year < 1980 or year > 2000)`.
-
-For more detailed answer, see language description.
 
 ## Language
 
@@ -74,16 +71,22 @@ Giving it better look
 (e.g. adding AND/OR keywords in place of commas) is on a TODO list. Full expression trees will most likely
 be never implemented.
 
-
 # Example usage
 Database is run with one argument - path to a database file. Queries are read from `stdin`. Query result (output csv or error) is written to `stdout`. Debug info, performance info, serious errors, all go to `stderr`. 
-
 
     > plantydb database.csv
     >> select * where year=[1980..2000), income[500..1000)
     year income debt
     1980 600 123
     1993 400 151
+
+# Benchmarks
+test name | planty-db | sqlite3 :memory: | sqlite3 from file | test description
+---|---|---|---
+test1 | 0.12s | 0.39s | 0.41s | single column, range scan, single interval
+test2 | 0.04s | 0.43s | 0.36s | single column, full scan, single interval
+test3 | 0.08s | 0.32s | 0.22s | single column, range scan, more intervals
+
 
 # Database file format
     col1 col2; 1

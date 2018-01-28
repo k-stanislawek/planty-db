@@ -196,8 +196,8 @@ auto lprintln = Printer<'\n'>{std::cerr};
 auto dprint = Printer<' '>{std::cerr};
 auto dprintln = Printer<'\n'>{std::cerr};
 #else
-template <class ...Ts> void dprint(Ts const&...) {}
-template <class ...Ts> void dprintln(Ts const&...) {}
+#define dprint(...)
+#define dprintln(...)
 #endif
 // }}}
 // {{{ lexical cast

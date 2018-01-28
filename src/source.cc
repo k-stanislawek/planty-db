@@ -599,8 +599,10 @@ public:
     TablePlayground(Table & table) : table_(table) {}
     void run(Query const& q, OutputFrame & outp) {
         auto const after_range = q.where_pred.perform_range_scan(table_.row_range());
+#ifdef PLAN_PRINTS
         for (auto const& after_range_elem : after_range.fullscan_requests())
             log_plan("Range scan result:", str(after_range_elem));
+#endif
         auto const rows = q.where_pred.perform_full_scan(after_range.fullscan_requests());
         log_plan("Full scan result:", str(rows));
         table_.write(q.select_cols, rows, outp);
