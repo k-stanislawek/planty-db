@@ -8,6 +8,7 @@ from ruamel.yaml import YAML
 
 import random
 
+random.seed(10)
 
 def get_tuples(cols, vals, key_len, last_val=None):
     if last_val:
