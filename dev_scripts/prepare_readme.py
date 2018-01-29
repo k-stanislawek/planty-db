@@ -10,7 +10,7 @@ from ruamel.yaml import YAML
 header = ["plantydb", "sqlmem", "sqldisk", "desc"]
 def prepare_presets_table(conf):
     lines = []
-    for name in conf["presets"]:
+    for name in sorted(conf["presets"]):
         info = conf["presets"][name]["info"]
         lines.append(" | ".join((name, *(str(info[c]) for c in header))))
     return "\n".join(lines)
