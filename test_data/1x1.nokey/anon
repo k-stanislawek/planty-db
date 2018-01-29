@@ -1,5 +1,0 @@
-Metadata(columns=["a"],key_len=0)
-rows: 1 columns: 1
-Query(where_preds=TablePredicate(
-    ColumnPredicate(column=ColumnHandle(column=IntColumn(name="a",length=1)),intervals=[[0..0]])
-),select_cols=[ColumnHandle(column=IntColumn(name="a",length=1))])

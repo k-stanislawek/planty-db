@@ -1,3 +1,0 @@
-select col where col=10, col=20
-select col where col=30
-select col
