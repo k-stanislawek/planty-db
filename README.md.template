@@ -84,15 +84,7 @@ Database is run with one argument - path to a database file. Queries are read fr
 
 test name | planty-db | sqlite3 :memory: | sqlite3 from file | test description
 --- | --- | --- | --- | ---
-test5 | 1.58s | 60s | 60s | query for exact row in 20-column table
-test7 | 4.33s | 3.84s | 3.56s | full scan for ~10 columns
-test4 | 2s | 5.8s | 5.7s | single column, full scan, query for 100 ranges
-test9 | 0.61s | 2.2s | 1.94s | full scan 2 columns
-test8 | 2.4s | 7.8s | 6.3s | full scan 3 columns, 1'000'000 values
-test6 | 1.07s | 8.42s | 4.11s | 13 columns, range scan, conditions are like `(c0=0 or c0=2) and (c1=0 or c1=2) and ...`
-test2 | 0.04s | 0.43s | 0.36s | single column, full scan, single interval
-test3 | 0.67s | 2.2s | 2.2s | single column, range scan, query for 100 ranges
-test1 | 0.12s | 0.39s | 0.41s | single column, range scan, single interval
+${benchmarks}
 
 SQLite table was created with primary key and WITHOUT ROWID.
 Test data can be reproduced using [generate_perf.py](planty-db/dev_scripts/generate_perf.py).

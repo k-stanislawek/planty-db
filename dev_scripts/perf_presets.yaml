@@ -1,0 +1,138 @@
+presets:
+  test1:
+    params:
+      vals: 65536
+      cols: 1
+      keylen: 1
+      queries: 10000
+      interval: 100
+      intervals: 1
+    info:
+      desc: single column, range scan, single interval
+      sqlmem: 0.39s
+      sqldisk: 0.41s
+      plantydb: 0.12s
+  test2:
+    params:
+      vals: 65536
+      cols: 1
+      keylen: 0
+      queries: 100
+      interval: 100
+      intervals: 1
+    info:
+      desc: single column, full scan, single interval
+      sqlmem: 0.43s
+      sqldisk: 0.36s
+      plantydb: 0.04s
+  test3:
+    params:
+      vals: 65536
+      cols: 1
+      keylen: 1
+      queries: 10000
+      interval: 1
+      intervals: 100
+    info:
+      plantydb: 0.67s
+      sqlmem: 2.2s
+      sqldisk: 2.2s
+      desc: single column, range scan, query for 100 ranges
+  test4:
+    params:
+      vals: 65536
+      cols: 1
+      keylen: 0
+      queries: 100
+      interval: 1
+      intervals: 100
+    info:
+      desc: single column, full scan, query for 100 ranges
+      plantydb: 2s
+      sqlmem: 5.8s
+      sqldisk: 5.7s
+  test5:
+    params:
+      vals: 2
+      cols: 20
+      keylen: 20
+      queries: 1000
+      interval: 1
+      intervals: 1
+    info:
+      desc: query for exact row in 20-column table
+      plantydb: 1.58s
+      sqlmem: 60s
+      sqldisk: 60s
+  test6:
+    params:
+      vals: 3
+      cols: 13
+      keylen: 13
+      queries: 500
+      interval: 1
+      last_val: 1
+      intervals: 2
+    info:
+      desc: "13 columns, range scan, conditions are like `(c0=0 or c0=2) and (c1=0 or c1=2) and ...`"
+      plantydb: 1.07s
+      sqlmem: 8.42s
+      sqldisk: 4.11s
+  test7:
+    params:
+      vals: 3
+      cols: 11
+      keylen: 0
+      queries: 500
+      interval: 1
+      last_val: 1
+      intervals: 2
+    info:
+      desc: full scan for ~10 columns
+      plantydb: 4.33s
+      sqlmem: 3.84s
+      sqldisk: 3.56s
+  test8:
+    params:
+      vals: 100
+      cols: 4
+      keylen: 0
+      queries: 100
+      interval: 10
+      last_val: 1
+      intervals: 1
+    info:
+      desc: full scan 3 columns, 1'000'000 values
+      plantydb: 2.4s
+      sqlmem: 7.8s
+      sqldisk: 6.3s
+  test9:
+    params:
+      vals: 500
+      cols: 3
+      keylen: 0
+      queries: 100
+      interval: 100
+      last_val: 1
+      intervals: 1
+    info:
+      desc: full scan 2 columns
+      plantydb: 0.61s
+      sqlmem: 2.2s
+      sqldisk: 1.94s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

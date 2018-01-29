@@ -1,6 +1,10 @@
 #!/usr/bin/env python3.5
+import sys
+import argparse
 from itertools import product
 from pathlib import Path
+
+from ruamel.yaml import YAML
 
 import random
 
@@ -82,66 +86,7 @@ def gen_queries(num_queries, interval_len, vals, cols):
         f.writelines([make_sqlite_query(iv) + "\n" for iv in intervals])
     print("sql ready")
 
-
-# - wylaczyc logowanie
-# - odpalic callgrinda i kcachegrinda na moim kodzie na profiling.e
-# Y50: ~/a/planty-db/build6 (master)$ time (sqlite3 db < sql 1> /dev/null 2> /dev/null)
-# - sprawdzic koszt stdout/stderr
-# time ( sqlite3 -init sqlite < sql 1> /dev/null 2> /dev/null )
-# time ( ../src/release.e csv 1> /dev/null 2> /dev/null < in )
-
-# do sprawdzenia:
-# - sqlite na dysku
-# - duzo range'ow w kolumnie
-# - duzo kolumn
-
-# dla wyniku dlugosci 1, w ktorym mozna uzyc rangescanu:
-# - sqlite: 20s ładowanie, 20s zapytania
-# - plantydb: 2s ladowanie, 12s zapytania
-
-# dla wyniku 1% z tablicy wielkosci 10^6, w ktorym byl fullscan na 10% danych:
-# - plantydb: 1m 7s
-# - sqlite: 5m
-
-# fullscan 1 kolumna: 10x szybszy plantydb
-
-#     vals = 2
-#     cols = 20
-#     queries = 1000
-#     keylen = 20
-#     interval = 1
-# plantydb: 2s, sqlite: 60s, sqlite na dysku: podobnie!
-
-# z dwoma intervalami w te same kolumnie dostaiemy w dupe.
-
-
-# dla
-#     vals = 3
-#     cols = 13
-#     keylen = 4
-#     queries = 100
-#     interval = 1
-#     last_val = 1
-#     intervals = 2
-# sqlite masakruie 5xkrotnie.
-# dla keylen=0 iest prawie remis.
-# dla keylen=13 wygrywamy 10x, pewnie na skutek rowid.
-# czemu przegrywamy dla keylen=4? nie wiadomo.
-# dla cols=1 i keylen=0 wygrywamy.
-
-# mieszanie koncowki nic nie daie
-
-# konkluzia: sqlite pewnie robi binsearch po wielu kolumnach naraz
-# a moze iakies cacheowanie/nauka?
-
-def run():
-    vals = 3
-    cols = 10
-    keylen = 1
-    queries = 500
-    interval = 1
-    last_val = 1
-    intervals = 1
+def run(vals, cols, keylen, queries, interval, last_val=None, intervals=1):
     with Path("csv").open("w") as f:
         f.writelines(get_csv(cols, vals, keylen, last_val))
     print("csv ready")
@@ -155,4 +100,31 @@ def run():
         gen_multiinterval_queries(queries, cols, vals+1, intervals)
 
 if __name__ == "__main__":
-    run()
+    def _run():
+        with (Path(sys.argv[0]).parent / "perf_presets.yaml").open("r") as f:
+            presets_config = YAML(typ="safe").load(f.read())
+        preset_names = list(presets_config["presets"])
+        parent_parser = argparse.ArgumentParser(add_help="data is written to $PWD")
+        subparsers = parent_parser.add_subparsers(dest="cmd")
+        subparsers.required = True
+        parser = subparsers.add_parser("preset")
+        parser.add_argument("presets", nargs="+", choices=preset_names)
+        parser = subparsers.add_parser("list")
+        parser = subparsers.add_parser("custom")
+        parser.add_argument("--vals", type=int, required=True)
+        parser.add_argument("--cols", type=int, required=True)
+        parser.add_argument("--keylen", type=int, required=True)
+        parser.add_argument("--queries", type=int, required=True)
+        parser.add_argument("--interval", type=int, required=True)
+        parser.add_argument("--intervals", type=int, default=1)
+        parser.add_argument("--last_val", type=int, default=None)
+        args = parent_parser.parse_args()
+        if args.cmd == "list":
+            print(", ".join(preset_names))
+        elif args.cmd == "preset":
+            for preset in args.presets:
+                run(**presets_config["presets"][preset]["params"])
+        elif args.cmd == "custom":
+            run(**args.__dict__)
+
+    _run()
