@@ -7,8 +7,9 @@ public:
     {
     }
     ~Measure() {
+        [[maybe_unused]]
         auto finish = std::chrono::high_resolution_clock::now();
-        if (std::uncaught_exception())
+        if (std::uncaught_exceptions())
             return;
         log_perf(name_, (finish - start_).count());
     }

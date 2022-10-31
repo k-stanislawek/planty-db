@@ -1,84 +1,66 @@
 # planty-db
 
-Tool for querying data in better complexity than `O(n)`.
+A small, "database"-like prototype program to query a sorted-CSV-like data efficiently (leveraging binary search). It's been implemented to see if a custom c++ "database", that is specialized at a specific use-case, but still generic over data, can compete, or even beat, a renowned database, like SQLite.
 
-`plantydb` reads CSV-like file along with information about sort order, and then answers SQL-like queries, trying to avoid scanning everything. It uses binary search whenever possible.
+It turns out that yeah, it can (with many caveats)! (My own measurements are at the end of this file.)
+However, this is not a practical tool at all.
 
-In practice, it can be used in combination with other database, e.g. SQLite, as a faster alternative for specific queries.
+## Features / limitations
 
-During program run, data is stored 100% in RAM and is read-only.
+### Input dataset format
 
-## What kind of queries?
+**planty-db** is launched like this: `plantydb file.csv`, and on startup, loads the whole file into RAM. The `file.csv` looks like this:
 
-- Selecting columns in CSV-like file (with integer numbers)
-- Filtering column values with `<`, `=` or `>` predicates (e.g. `year > 1980`)
-- Most logical relations between predicates can be expressed, e.g. `income < 500 and (year < 1980 or year > 2000)`.
+```
+col1 col2 col3; 2
+1 20 900
+4 10 800
+5 10 700
+5 20 600
+5 40 500
+6 10 400
+10 10 300
+```
+First line is a header, as well as one extra number - number of leading columns that the file is sorted by (like a "primary key").
 
-## Language
+The database supports exactly one such "table", it's fully loaded on startup and immutable. Basically, updating is out of scope of this prototype.
 
-    select <comma-separated column_list (or *)> [where <comma-separated condition list>]
-    # e.g.
-    select a, b where a=0, b=2
-    select a
-    select * where b=[0..)
+### Data types
 
-Expressions have two forms - `column=value` or `column=<interval>`:
+Only numbers supported - 64-bit signed integers.
 
-    select a where a=0
-    select a where a=[0..2)
-    select a where a=(2..4]
-    select a where a=(..2]
+### Queries / mistakes
 
-Interval can be open, closed or unlimited on either side. Open interval starts/ends with `(`/`)`. Closed starts/ends with `[`/`]`. Unlimited interval don't have a value, e.g. `(..5]`, `(2..)` or `(..)`.
+A sql-like, quick-and-dirty query format has been implemented. Example queries:
 
-### How are logical AND/OR expressed?
+    select *
+    # In SQL, this would be SELECT * FROM sth, but "from" clause is skipped.
 
-At first, predicates are grouped by column, and joined with OR expression. Then all groups are AND-ed together.
+    select col1, col2
+    # You can specify columns as well.
 
-Let's see some examples. Let's start with single column.
+    select * where col1=0, col2=2
+    # Filter by values. Predicates of different columns are all enforced in the output.
 
-    SQL:
-        SELECT a FROM t WHERE a=2 OR a=4 OR a>10;
-    plantydb:
-        SELECT a WHERE a=2, a=4, a=(10..)
- 
-Explanation: expressions for the same column are treated as in they were in OR expression.
-For single column, it allows `plantydb` to express everything `SQL` can.
+    select * where col1=0, col1=1
+    # This time, both predicates address the same column. Multiple predicates on the same column
+    # have highest preference, and are considered alternatives.
+    # So, both rows with col1=0 and col1=1 will be returned.
+    # I realize it's confusing, I think it's been a mistake.
+    # Putting it all together:
+    select * where col1=0, col1=1, col2=1
+    # This is equivalent to SQL:
+    # SELECT * FROM <somewhere> WHERE (col1=0 OR col1=1) AND col2=1
+    # It's been done like this to support the most common-sense use-cases, without supporting nested expressions.
 
-Negation example:
+    # Regarding predicates - aside from "=NUM" seen above, there's also "=RANGE".
+    # It can be used anywhere in place of "=NUM":
+    select * where col1=[0..5]
+    # Intervals can also be open-ended on either side:
+    select * where col1=(2..10], col2=[3..8)
+    # ... as well as unlimited:
+    select * where col1=(2..), col2=(..10)
 
-    SQL:
-        SELECT a FROM t WHERE NOT a=2;
-    plantydb:
-        SELECT a WHERE a=(..2), a=(2..)
-
-Let's move on to expressions involving many columns.
-
-    SQL:
-        SELECT * FROM t WHERE ((year>1980 AND year<=2000) OR year=2018) AND debt>0
-    plantydb:
-        SELECT * WHERE year=(1980..2000), year=2018, debt>0
-    other version:
-        SELECT * WHERE year=(1980..2000), debt>0, year=2018
-
-It works, because expressions for different column are treated as alternative.
-
-### Why not SQL? (author's motivation)
-
-For a small, backend-focused project like this, I wanted parsing logic to be as simple as possible.
-
-Giving it better look
-(e.g. adding AND/OR keywords in place of commas) is on a TODO list. Full expression trees will most likely
-be never implemented.
-
-# Example usage
-Database is run with one argument - path to a database file. Queries are read from `stdin`. Query result (output csv or error) is written to `stdout`. Debug info, performance info, serious errors, all go to `stderr`. 
-
-    > plantydb database.csv
-    >> select * where year=[1980..2000), income[500..1000)
-    year income debt
-    1980 600 123
-    1993 400 151
 
 # Benchmarks
 
@@ -98,26 +80,14 @@ SQLite table was created with primary key and WITHOUT ROWID.
 Test data can be reproduced using [generate_perf.py](planty-db/dev_scripts/generate_perf.py).
 Preset config is [here](planty-db/dev_scripts/perf_presets.yaml).
 
-Those benchmarks are just for perspective. They should not be taken too seriously, because test cases were not very considerate, and methodology was a bit sloppy.
-
 In case of "sqlite from file" test, database was prepared before measurement. In both other cases, loading data from file - in case of SQLite, INSERT statements - is also part of measurement.
 
 SQLite version is 3.11.0. Test measurement was made using `time` linux utility, on typical modern computer - Ubuntu Linux 16.04, with Intel i7 4700hq processor, SSD storage, and more than enough RAM.
 
 
-# Database file format
-    col1 col2; 1
-    0 1312
-    0 112
-    0 210
-    20 11
-
-Number after the semicolon is a number of columns by which the data is initially sorted. It can be any number, from zero to total number of columns.
-
-The data ordering is used to perform queries without full scan.
-
 # Build instructions
     > cd src/
+    > make
     > make release.e
 
 For more build targets and compilation options, see `src/Makefile`.
@@ -127,5 +97,9 @@ For more build targets and compilation options, see `src/Makefile`.
 - aside from that, no library dependencies
 
 # Running tests
-    # required: python3.5, pytest
-    dev_scripts/run_tests.py
+    # required: python3.5+, pytest
+    python dev_scripts/run_tests.py
+
+# Benchmark
+    # required: python3.5+, pytest, ruamel.yaml
+

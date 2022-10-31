@@ -798,7 +798,7 @@ void main_loop(const CmdArgs& args) {
 }
 // }}}
 // cmdline {{{
-void quit(std::string msg) {
+void quit([[maybe_unused]] std::string msg) {
     log_info(msg, "- exiting");
     exit(13);
 }
